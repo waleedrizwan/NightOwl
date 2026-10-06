@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Copy recorded nights from the bedside Pi to this Mac over the home network.
-# Recordings land in $DC_DATA/nights (default ~/DreamCatcher), outside the repo:
+# Recordings land in $OWL_DATA/nights (default ~/NightOwl), outside the repo:
 # they are audio of you sleeping and never belong in git.
 set -euo pipefail
 
-DATA="${DC_DATA:-$HOME/DreamCatcher}"
-HOST="${DC_HOST:-dreamcatcher}"
+DATA="${OWL_DATA:-$HOME/NightOwl}"
+HOST="${OWL_HOST:-nightowl}"
 mkdir -p "$DATA/nights"
 
 echo "Pulling nights from $HOST → $DATA/nights"

@@ -1,4 +1,4 @@
-> **Superseded (2026-10-04).** The ESP32 build was dropped as over-engineered and never ordered. The bedside device is now the user's Raspberry Pi 3 recording audio only, with analysis on the Mac: see [`pi/README.md`](../pi/README.md). The model and data plan in this document still apply.
+> **Superseded (2026-10-04).** This ESP32 build was the first concept for the bedside device and was never built. Night Owl is now a Raspberry Pi 3 that records audio, with analysis on the Mac: see the [README](../../README.md). The model and data plan here still apply.
 
 # Bedside snore recorder prototype: parts and wiring
 

@@ -1,7 +1,7 @@
-# tools/yamnet — the bundled classifier, reproducibly
+# model/build — the classifier, reproducibly
 
-The app ships `ios/Packages/SnoreAudio/Sources/SnoreAudio/Resources/YAMNet.mlmodelc`
-(+ `yamnet_class_map.csv`). This directory rebuilds it from Google's released
+Night Owl ships `model/YAMNet.mlmodelc` (+ `model/yamnet_class_map.csv`), the same
+file the Dream Catcher iPhone app bundles. This directory rebuilds it from Google's released
 YAMNet so nobody has to trust a binary blob.
 
 Why YAMNet, CPU-only: Spike 0 on a physical iPhone 17 / iOS 26.6 (2026-09-19)
@@ -12,13 +12,13 @@ run with `computeUnits = .cpuOnly` is the path iOS allows all night.
 ## Rebuild
 
 ```sh
-cd tools/yamnet
+cd model/build
 uv venv --python 3.11 .venv && uv pip install --python .venv/bin/python -r requirements.txt
 ./fetch.sh                       # model definition + weights (sha256-checked)
 .venv/bin/python convert.py      # → YAMNet.mlpackage (checks TF vs Core ML ≤ 1e-5)
 xcrun coremlcompiler compile YAMNet.mlpackage compiled
-rm -rf ../../ios/Packages/SnoreAudio/Sources/SnoreAudio/Resources/YAMNet.mlmodelc
-cp -R compiled/YAMNet.mlmodelc src/yamnet_class_map.csv ../../ios/Packages/SnoreAudio/Sources/SnoreAudio/Resources/
+rm -rf ../YAMNet.mlmodelc
+cp -R compiled/YAMNet.mlmodelc src/yamnet_class_map.csv ../
 ```
 
 Model contract (what `YAMNetClassifier.swift` relies on):

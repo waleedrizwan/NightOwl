@@ -1,0 +1,9 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+
+# Recordings and reports are audio of someone sleeping: never commit them.
+*.wav
+nights/
+reports/

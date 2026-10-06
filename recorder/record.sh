@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dream Catcher bedside recorder (Raspberry Pi).
+# Night Owl bedside recorder (Raspberry Pi).
 #
 # Records the USB mic to WAV during the sleep window, in 10-minute files.
 # Cron runs it every 5 minutes and on boot; outside the window it exits
@@ -12,20 +12,20 @@ set -u
 
 # Window times and file names are in this zone regardless of the Pi's system
 # timezone (changing that needs sudo; this does not).
-export TZ="${DC_TZ:-America/Toronto}"
+export TZ="${OWL_TZ:-America/Toronto}"
 
-START="${DC_START:-02:00}"          # local time, HH:MM
-END="${DC_END:-12:00}"              # local time, HH:MM (must be after START, same day)
-DEVICE="${DC_DEVICE:-plughw:CARD=Device,DEV=0}"
-CHUNK_SECS="${DC_CHUNK_SECS:-600}"
-ROOT="${DC_ROOT:-$HOME/nights}"
-LOG="${DC_LOG:-$HOME/dreamcatcher/record.log}"
+START="${OWL_START:-02:00}"          # local time, HH:MM
+END="${OWL_END:-12:00}"              # local time, HH:MM (must be after START, same day)
+DEVICE="${OWL_DEVICE:-plughw:CARD=Device,DEV=0}"
+CHUNK_SECS="${OWL_CHUNK_SECS:-600}"
+ROOT="${OWL_ROOT:-$HOME/nights}"
+LOG="${OWL_LOG:-$HOME/nightowl/record.log}"
 
 mkdir -p "$(dirname "$LOG")" "$ROOT"
 log() { echo "$(date '+%F %T %Z') $*" >> "$LOG"; }
 
 # One recorder at a time (cron at 02:00 and @reboot can overlap).
-exec 9>"$HOME/dreamcatcher/record.lock"
+exec 9>"$HOME/nightowl/record.lock"
 flock -n 9 || exit 0
 
 # No RTC on a Pi 3: after a power cut the clock is wrong until network time

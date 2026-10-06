@@ -1,9 +1,9 @@
-> **Superseded (2026-10-04).** The ESP32 build was dropped as over-engineered and never ordered. The bedside device is now the user's Raspberry Pi 3 recording audio only, with analysis on the Mac: see [`pi/README.md`](../pi/README.md). The model and data plan in this document still apply.
+> **Superseded (2026-10-04).** This ESP32 build was the first concept for the bedside device and was never built. Night Owl is now a Raspberry Pi 3 that records audio, with analysis on the Mac: see the [README](../../README.md). The model and data plan here still apply.
 
-# Dream Catcher — Bedside Device Design Document
+# Night Owl: ESP32 Bedside Device Concept
 
 Status: **design, nothing built.** Parts specified and verified 2026-09-19; order not yet placed.
-Companion documents: [`parts-list.md`](parts-list.md) (BOM, wiring, gotchas), [`../spec/SHARED_BEHAVIOR_SPEC.md`](../spec/SHARED_BEHAVIOR_SPEC.md) (normative detection behavior), [`../docs/design-ios.md`](../docs/design-ios.md) (the phone app this syncs to).
+Companion documents: [`parts-list.md`](parts-list.md) (BOM, wiring, gotchas), [Dream Catcher spec](https://github.com/waleedrizwan/DreamCatcher/blob/main/spec/SHARED_BEHAVIOR_SPEC.md) (normative detection behavior), [Dream Catcher iOS design](https://github.com/waleedrizwan/DreamCatcher/blob/main/docs/design-ios.md) (the phone app this syncs to).
 
 ---
 
@@ -11,7 +11,7 @@ Companion documents: [`parts-list.md`](parts-list.md) (BOM, wiring, gotchas), [`
 
 The phone app works, but it inherits a problem the phone will not let us solve.
 
-**The technical trigger.** Spike 0 on a physical iPhone 17 / iOS 26.6 (2026-09-19, 71 minutes locked) confirmed the failure predicted in [`../docs/design-feasibility.md`](../docs/design-feasibility.md) §B1: Apple's built-in `SoundAnalysis` classifier produced 7 results over ~4 seconds, then returned `com.apple.SoundAnalysis` code 2 and nothing further, while mic RMS kept updating for the full hour. iOS forbids background GPU work. The workaround is a CPU-only Core ML model, which is implemented but costs battery and still leaves the app subject to OS-level termination. Android is worse: users of Sleep as Android report 35–50% of nights failing because the OS kills the app mid-night.
+**The technical trigger.** Spike 0 on a physical iPhone 17 / iOS 26.6 (2026-09-19, 71 minutes locked) confirmed the failure predicted in [Dream Catcher feasibility review](https://github.com/waleedrizwan/DreamCatcher/blob/main/docs/design-feasibility.md) §B1: Apple's built-in `SoundAnalysis` classifier produced 7 results over ~4 seconds, then returned `com.apple.SoundAnalysis` code 2 and nothing further, while mic RMS kept updating for the full hour. iOS forbids background GPU work. The workaround is a CPU-only Core ML model, which is implemented but costs battery and still leaves the app subject to OS-level termination. Android is worse: users of Sleep as Android report 35–50% of nights failing because the OS kills the app mid-night.
 
 A device whose only job is listening has no OS to fight.
 
@@ -47,7 +47,7 @@ The graveyard matters more than the competition: Hello Sense, Amazon Halo Rise, 
 - Wi-Fi, cloud, accounts, OTA updates. The radio exists on the chip and stays unused.
 - Continuous full-night audio recording. Events and clips only.
 - Any intervention (no pillow, no vibration, no sound).
-- Vitals. HealthKit remains the phone app's business (see [`../docs/design-scope.md`](../docs/design-scope.md)).
+- Vitals. HealthKit remains the phone app's business (see [Dream Catcher scope review](https://github.com/waleedrizwan/DreamCatcher/blob/main/docs/design-scope.md)).
 - Battery operation. It is a nightstand appliance; it lives on a wall charger.
 
 ### Explicit non-goals
@@ -189,11 +189,11 @@ Queue-full policy: drop the *clip* (it is a convenience) and keep the *event* (i
 
 16 kHz, 16-bit, mono. The PDM mic is documented as stable only at this rate, and it is the input rate YAMNet wants, so no resampling anywhere in the chain. `ESP_I2S.h` with `setPinsPdmRx(42, 41)`; OPI PSRAM enabled in the build config.
 
-The 60 s ring buffer (not 30 s) is a deliberate correction of the bug found in the phone app's spec ([`design-feasibility.md`](../docs/design-feasibility.md) M1): an episode confirms only after a 30 s span, so the peak event that triggers a clip can already be at or past the edge of a 30 s ring. 1.9 MB of a spare 8 MB is a cheap fix.
+The 60 s ring buffer (not 30 s) is a deliberate correction of the bug found in the phone app's spec ([`design-feasibility.md`](https://github.com/waleedrizwan/DreamCatcher/blob/main/docs/design-feasibility.md) M1): an episode confirms only after a 30 s span, so the peak event that triggers a clip can already be at or past the edge of a 30 s ring. 1.9 MB of a spare 8 MB is a cheap fix.
 
 ### 3.2 Detection
 
-The window/hop/episode constants are **not redefined here**. [`../spec/SHARED_BEHAVIOR_SPEC.md`](../spec/SHARED_BEHAVIOR_SPEC.md) is normative for snoring, and the device must reproduce the golden fixtures in [`../spec/fixtures/`](../spec/fixtures/) or it is wrong. This is the same rule the two phone platforms follow, and it is the only way the device's numbers and the phone's numbers can ever be compared.
+The window/hop/episode constants are **not redefined here**. [Dream Catcher spec](https://github.com/waleedrizwan/DreamCatcher/blob/main/spec/SHARED_BEHAVIOR_SPEC.md) is normative for snoring, and the device must reproduce the golden fixtures in [`../spec/fixtures/`](../spec/fixtures/) or it is wrong. This is the same rule the two phone platforms follow, and it is the only way the device's numbers and the phone's numbers can ever be compared.
 
 Two deltas the spec does not yet cover, both requiring **schema v2**:
 
@@ -268,7 +268,7 @@ This is the part that determines whether the device is interesting or just a mic
 
 **YAMNet embeddings plus a trained classification head**, quantized to int8 and run on the ESP32-S3 via TFLite Micro or an Edge Impulse export. YAMNet's 1024-dimensional embedding layer is a general-purpose audio representation; the head is a small dense network over it, trained on the four classes that matter. This keeps the learned front-end (which we cannot improve with the data we have) and trains only the part that needs our labels.
 
-The phone app already runs a YAMNet-family Core ML model CPU-only ([`design-ios.md`](../docs/design-ios.md), post-Spike-0 inversion). Sharing the front-end between phone and device means the thresholds in the shared spec keep meaning the same thing on both.
+The phone app already runs a YAMNet-family Core ML model CPU-only ([`design-ios.md`](https://github.com/waleedrizwan/DreamCatcher/blob/main/docs/design-ios.md), post-Spike-0 inversion). Sharing the front-end between phone and device means the thresholds in the shared spec keep meaning the same thing on both.
 
 ### 4.2 Classes and data
 
@@ -371,7 +371,7 @@ Not a v1 concern, but it shapes v1 decisions (notably the pre-certified module i
 | Mic stable at 16 kHz/16-bit; `setPinsPdmRx(42, 41)` | [Seeed mic wiki](https://wiki.seeedstudio.com/xiao_esp32s3_sense_mic/) |
 | SP3T common is pin 3, not an end pin | [Same Sky SLW-178562 datasheet](https://www.sameskydevices.com/product/resource/slw-178562-3a-s-d.pdf) |
 | Factory image runs a webcam and open AP | Seeed getting-started wiki |
-| Spike 0 failure: SoundAnalysis code 2 after ~4 s locked | This repo, 2026-09-19 device run; [`../docs/design-feasibility.md`](../docs/design-feasibility.md) §B1 |
+| Spike 0 failure: SoundAnalysis code 2 after ~4 s locked | This repo, 2026-09-19 device run; [Dream Catcher feasibility review](https://github.com/waleedrizwan/DreamCatcher/blob/main/docs/design-feasibility.md) §B1 |
 | PSG-Audio dataset, 212 nights, CC BY 4.0 | Sci Data 2021, ScienceDB doi 10.11922/sciencedb.00345 |
 | Sleepal pricing and subscription gating | [SmartHomeScene review](https://smarthomescene.com/reviews/sleepal-ai-lamp-sleep-tracking-without-wearing-anything/), [Kickstarter FAQ](https://www.kickstarter.com/projects/sleepal/sleepal-ai-lamp-tracking-and-improving-sleep-naturally/faqs) |
 | Smart Nora bankruptcy, July 2025 | [BetaKit](https://betakit.com/sleep-tech-startup-smart-nora-files-for-bankruptcy-after-tariffs-derail-product-launch-and-fundraising-attempts/) |

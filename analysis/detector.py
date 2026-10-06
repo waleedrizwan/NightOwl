@@ -1,9 +1,9 @@
-"""Dream Catcher — reference implementation of the shared detector.
+"""Night Owl: the snore detector (the strict, phone-app rules).
 
-This is the normative executable form of spec/SHARED_BEHAVIOR_SPEC.md §1.
-It exists to (a) generate/validate the golden fixtures both native
-implementations must pass, and (b) serve as the offline tuning tool for
-threshold sweeps over recorded-night CSVs.
+Forked from Dream Catcher's reference detector, the executable form of its
+spec §1 (https://github.com/waleedrizwan/DreamCatcher/blob/main/spec/SHARED_BEHAVIOR_SPEC.md).
+Night Owl owns this copy and is free to diverge; analyze.py uses it for
+`--strict` and records its result as `strictDetector` in summary.json.
 
 Pure Python 3, stdlib only. No wall clock, no I/O in the detector itself.
 """
@@ -83,9 +83,7 @@ def clamp(x: float, lo: float, hi: float) -> float:
 
 
 class SnoreDetector:
-    """Direct transliteration of spec §1.3. Keep in lockstep with
-    ios/Packages/SnoreCore/.../SnoreDetector.swift and
-    android/core/detection/.../SnoreDetector.kt."""
+    """Direct transliteration of Dream Catcher's spec §1.3."""
 
     def __init__(self, params: DetectorParams):
         self.p = params

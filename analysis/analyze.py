@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Dream Catcher — analyze one night recorded by the bedside Pi.
+"""Night Owl: analyze one night recorded by the bedside Pi.
 
 Reads the night's 10-minute WAV chunks (pulled by pull.sh), runs the same
-YAMNet Core ML model the iPhone app bundles, feeds the frames through the
-shared reference detector (spec/reference/detector.py), and writes:
+YAMNet Core ML model as the Dream Catcher iPhone app (model/), feeds the frames
+through the snore detector (detector.py), and writes:
 
     <data>/reports/<night>/report.html    the morning report
     <data>/reports/<night>/summary.json   machine-readable numbers
     <data>/reports/<night>/frames.csv     one row per 500 ms frame (levels + scores)
     <data>/reports/<night>/clips/*.wav    12 s per snoring episode, 8 s per gasp candidate
 
-Frames follow spec §0 exactly as the iOS adapter builds them: a frame every
+Frames follow Dream Catcher's spec §0, as its iOS adapter builds them: a frame every
 8 000 samples, rms/peak over the trailing 16 000 raw samples, YAMNet over the
 trailing 15 600 samples peak-normalized to 0.5 (gain <= +30 dB), timestamps
 from the sample count anchored at each capture (re)start (§0.2). A gap
 between chunks (the recorder restarted) flushes the detector and re-anchors.
 
-Usage:  pi/.venv/bin/python pi/analyze.py [NIGHT] [--data DIR] [--no-open]
+Usage:  analysis/.venv/bin/python analysis/analyze.py [NIGHT] [--data DIR] [--no-open]
         NIGHT is a folder name under <data>/nights (e.g. 2026-10-05) or a path;
         default is the most recent night.
 """
@@ -40,15 +40,13 @@ import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "spec" / "reference"))
-from detector import DetectorParams, Frame, SnoreDetector  # noqa: E402
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import denoise  # noqa: E402
+from detector import DetectorParams, Frame, SnoreDetector  # noqa: E402
 
-MODEL_DIR = REPO / "ios/Packages/SnoreAudio/Sources/SnoreAudio/Resources"
-TZ = ZoneInfo(os.environ.get("DC_TZ", "America/Toronto"))
-DATA = Path(os.environ.get("DC_DATA", Path.home() / "DreamCatcher"))
+MODEL_DIR = REPO / "model"
+TZ = ZoneInfo(os.environ.get("OWL_TZ", "America/Toronto"))
+DATA = Path(os.environ.get("OWL_DATA", Path.home() / "NightOwl"))
 
 SR = 16_000
 HOP = 8_000            # spec HOP_MS = 500
@@ -420,7 +418,7 @@ def analyze(night_dir: Path, out_dir: Path, clean_levels: bool = False,
         # each frame is a 1 s window on a 0.5 s hop, so frames x 0.5 s ≈ time heard
         "faintSnoreMs": sum(fb["frames"] for fb in faint) * 500,
         "frames": len(rows), "analysisSeconds": round(elapsed, 1),
-        "model": "YAMNet Core ML (ios bundle), CPU", "detectorParams": dataclasses.asdict(params),
+        "model": "YAMNet Core ML, CPU", "detectorParams": dataclasses.asdict(params),
         "levelsFrom": "hiss-removed audio" if clean_levels else "raw audio",
         "humRemoved": dehum,
         "tonesRemovedPerFile": {Path(k).name: [round(t, 2) for t in v[:12]] for k, v in tones.items()},
@@ -692,7 +690,7 @@ def render(s: dict) -> str:
                      f'{s["discardedEpisodes"]} short bout{"s" if s["discardedEpisodes"] != 1 else ""} too brief to count.')
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dream Catcher · {night.strftime('%b %-d')}</title>
+<title>Night Owl · {night.strftime('%b %-d')}</title>
 <style>
 :root {{ --bg:#fbfaf8; --card:#fff; --ink:#1d1d1f; --muted:#6e6e73; --line:#e6e4df;
   --light:#f3cd8f; --moderate:#e5812e; --loud:#9e2a14; --gap:#d9d7d2; --gasp:#3a6fd8; --faint:#9b8fc4; }}
@@ -778,7 +776,7 @@ footer {{ color:var(--muted); font-size:12px; margin-top:24px }}
 {f'<section class="card wide"><h2>Snoring too faint to count</h2>{body_faint}</section>' if body_faint else ""}
 <section class="card wide"><h2>Possible gasps</h2>{body_gasp}</section>
 <div class="pbar" id="pbar" hidden><span id="now"></span><audio id="player" controls preload="none"></audio></div>
-<footer>Dream Catcher can't tell who, or what, is snoring. Analyzed {s["frames"]:,} frames in {s["analysisSeconds"]} s with {e(s["model"])}. {footer_detail} Clips have the mic hiss removed and are turned up; "original" is the untouched recording.</footer>
+<footer>Night Owl can't tell who, or what, is snoring. Analyzed {s["frames"]:,} frames in {s["analysisSeconds"]} s with {e(s["model"])}. {footer_detail} Clips have the mic hiss removed and are turned up; "original" is the untouched recording.</footer>
 </main>
 <script id="dc-data" type="application/json">{js_data}</script>
 <script>{PLAYER_JS}</script>
@@ -813,7 +811,7 @@ def main():
     else:
         dirs = sorted(d for d in nights.glob("*") if d.is_dir() and any(d.glob("*.wav")))
         if not dirs:
-            raise SystemExit(f"no nights in {nights}; run pi/pull.sh first")
+            raise SystemExit(f"no nights in {nights}; run analysis/pull.sh first")
         night_dir = dirs[-1]
     if not night_dir.is_dir():
         raise SystemExit(f"{night_dir} does not exist")

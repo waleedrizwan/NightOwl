@@ -1,4 +1,11 @@
 # Night Owl
+
+![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-C51A4A?logo=raspberrypi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![iOS](https://img.shields.io/badge/iOS-000000?logo=apple&logoColor=white)
+![MIT](https://img.shields.io/badge/license-MIT-blue)
+![personal project](https://img.shields.io/badge/personal%20project-not%20a%20product-lightgrey)
+
 Raspberry Pi with a USB mic next to my bed. records the whole nightruns it through YAMNet. generates a sleep chart that lets you listen to all snoring periods detected. aiming to integrate smart tracker metric side by side (whoop, fitbit, whatever works), to see blood oxygen, breathing rate etc. I think I could add an infrared camera, to watch my breathing and sleeping position in the dark.
 
 real night minus audio

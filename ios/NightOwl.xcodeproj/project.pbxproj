@@ -1,0 +1,337 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		068D2E01DAB1F7B6E2566897 /* NightOwlApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919750C5FC44DF6FD6F45011 /* NightOwlApp.swift */; };
+		0C2A761FF423F8FEA3C881EA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 505BDFBE5D06D74D6E476785 /* Assets.xcassets */; };
+		1D1499A14273D1A34263A094 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E9CA27576A2FE274BE2A838 /* Store.swift */; };
+		449ED6DC163F785AABE0A833 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CF9A3ADABAD6ED8CC045BB /* Theme.swift */; };
+		61EB5324327CC59653795D11 /* NightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5E07E22F175F6020EBBC019 /* NightView.swift */; };
+		E829DC6CF7481ADED9CE274D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D3F75B5DF808E0E9AEAC0C2 /* RootView.swift */; };
+		ED0732388C49D1040960F57C /* TrendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B3165303200692B5BE59971 /* TrendsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1E3C3006E224836AD3B7FAD7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1E9CA27576A2FE274BE2A838 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
+		49BB3548515B0688AD13A1C3 /* NightOwl.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NightOwl.entitlements; sourceTree = "<group>"; };
+		4B3165303200692B5BE59971 /* TrendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsView.swift; sourceTree = "<group>"; };
+		4D3F75B5DF808E0E9AEAC0C2 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		505BDFBE5D06D74D6E476785 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		59CF9A3ADABAD6ED8CC045BB /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		919750C5FC44DF6FD6F45011 /* NightOwlApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightOwlApp.swift; sourceTree = "<group>"; };
+		B5E07E22F175F6020EBBC019 /* NightView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightView.swift; sourceTree = "<group>"; };
+		C10A32505D6B38FEA7506675 /* NightOwl.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NightOwl.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		39643D3A8D470C2BDB7022C0 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C10A32505D6B38FEA7506675 /* NightOwl.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5848CDD5B72F97420C3896AB = {
+			isa = PBXGroup;
+			children = (
+				92F51FC20478668C580B1E19 /* NightOwl */,
+				39643D3A8D470C2BDB7022C0 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		92F51FC20478668C580B1E19 /* NightOwl */ = {
+			isa = PBXGroup;
+			children = (
+				505BDFBE5D06D74D6E476785 /* Assets.xcassets */,
+				1E3C3006E224836AD3B7FAD7 /* Info.plist */,
+				49BB3548515B0688AD13A1C3 /* NightOwl.entitlements */,
+				919750C5FC44DF6FD6F45011 /* NightOwlApp.swift */,
+				B5E07E22F175F6020EBBC019 /* NightView.swift */,
+				4D3F75B5DF808E0E9AEAC0C2 /* RootView.swift */,
+				1E9CA27576A2FE274BE2A838 /* Store.swift */,
+				59CF9A3ADABAD6ED8CC045BB /* Theme.swift */,
+				4B3165303200692B5BE59971 /* TrendsView.swift */,
+			);
+			path = NightOwl;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2ACB53F29A3F835B8A74104C /* NightOwl */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6B233209F148E594D286F8A3 /* Build configuration list for PBXNativeTarget "NightOwl" */;
+			buildPhases = (
+				42A7B29B907F7B8BA7C0F724 /* Sources */,
+				30F19094F5677176DF0B6DD5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NightOwl;
+			packageProductDependencies = (
+			);
+			productName = NightOwl;
+			productReference = C10A32505D6B38FEA7506675 /* NightOwl.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1919A3EF7682D630C80157B1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2ACB53F29A3F835B8A74104C = {
+						DevelopmentTeam = CCY6PYVHZW;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 6FD4E64AA459B7EBA991A6F3 /* Build configuration list for PBXProject "NightOwl" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5848CDD5B72F97420C3896AB;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 39643D3A8D470C2BDB7022C0 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2ACB53F29A3F835B8A74104C /* NightOwl */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		30F19094F5677176DF0B6DD5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0C2A761FF423F8FEA3C881EA /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		42A7B29B907F7B8BA7C0F724 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				068D2E01DAB1F7B6E2566897 /* NightOwlApp.swift in Sources */,
+				61EB5324327CC59653795D11 /* NightView.swift in Sources */,
+				E829DC6CF7481ADED9CE274D /* RootView.swift in Sources */,
+				1D1499A14273D1A34263A094 /* Store.swift in Sources */,
+				449ED6DC163F785AABE0A833 /* Theme.swift in Sources */,
+				ED0732388C49D1040960F57C /* TrendsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		03CECAAA2FB701EE7E6FB9F1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		5E64380A2655FC28EE8E1C46 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NightOwl/NightOwl.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CCY6PYVHZW;
+				INFOPLIST_FILE = NightOwl/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.waleedrizwan.NightOwl;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		91E6D14B5A4C3F5AB4E6794A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B787512644858785FCFAA6FF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NightOwl/NightOwl.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CCY6PYVHZW;
+				INFOPLIST_FILE = NightOwl/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.waleedrizwan.NightOwl;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6B233209F148E594D286F8A3 /* Build configuration list for PBXNativeTarget "NightOwl" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B787512644858785FCFAA6FF /* Debug */,
+				5E64380A2655FC28EE8E1C46 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6FD4E64AA459B7EBA991A6F3 /* Build configuration list for PBXProject "NightOwl" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				03CECAAA2FB701EE7E6FB9F1 /* Debug */,
+				91E6D14B5A4C3F5AB4E6794A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1919A3EF7682D630C80157B1 /* Project object */;
+}

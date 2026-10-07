@@ -42,6 +42,21 @@ def load(data: Path) -> list[dict]:
     return nights
 
 
+def compact(s: dict) -> dict:
+    """What the phone app needs for one night (no per-frame data)."""
+    return {
+        "night": s["night"], "dir": s["dir"], "score": s["score"], "band": s["band"],
+        "startMs": s["startMs"], "endMs": s["endMs"], "recordedMs": s["recordedMs"],
+        "snoreMs": s["snoreMs"], "percentOfNight": s["percentOfNight"],
+        "snoreByHour": [{"hour": HEAT_FROM + i, "minutes": round(m, 2)} for i, m in enumerate(s["hours"])],
+        "timeline": [{"startMs": b["startMs"], "snoreSec": b["snoreSec"]} for b in s["timeline"]],
+        "bouts": [{"startMs": e["startMs"], "endMs": e["endMs"], "sounds": e["sounds"],
+                   "maxScore": e["maxScore"], "clip": e.get("clip")} for e in s["episodes"]],
+        "gasps": [{"tMs": g["tMs"], "score": g["score"], "clip": g.get("clip")}
+                  for g in s.get("gaspCandidates", [])],
+    }
+
+
 def label(s: dict, fmt="%a %b %-d") -> str:
     return datetime.strptime(s["night"], "%Y-%m-%d").strftime(fmt)
 

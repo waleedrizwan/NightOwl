@@ -12,3 +12,5 @@ fi
 "$HERE/pull.sh"
 "$HERE/.venv/bin/python" "$HERE/analyze.py" --no-open "$@"
 "$HERE/.venv/bin/python" "$HERE/dashboard.py"
+"$HERE/.venv/bin/python" "$HERE/publish.py"
+"$HERE/.venv/bin/python" "$HERE/notify.py"

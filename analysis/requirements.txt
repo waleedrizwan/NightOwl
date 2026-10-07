@@ -1,2 +1,4 @@
 coremltools>=8.0,<9
 numpy
+cryptography
+httpx[http2]

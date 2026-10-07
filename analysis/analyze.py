@@ -43,6 +43,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import denoise  # noqa: E402
 from detector import DetectorParams, Frame, SnoreDetector  # noqa: E402
+from score import band, snore_score  # noqa: E402
 
 MODEL_DIR = REPO / "model"
 TZ = ZoneInfo(os.environ.get("OWL_TZ", "America/Toronto"))
@@ -428,6 +429,7 @@ def analyze(night_dir: Path, out_dir: Path, clean_levels: bool = False,
             [(t - session_start) // 60_000 for t in sound_starts if session_start <= t < session_end],
             minlength=-(-(session_end - session_start) // 60_000)).tolist(),
     }
+    summary["snoreScore"] = snore_score(summary)
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     (out_dir / "report.html").write_text(render(summary))
     return summary
@@ -826,6 +828,7 @@ def main():
           f"({s['percentOfNight']}% of the night) in {len(s['episodes'])} "
           f"{'bout' if s['mode'] == 'ai' else 'episode'}(s)")
     print(f"  possible gasps: {len(s['gaspCandidates'])}")
+    print(f"  Snore Score: {s['snoreScore']} ({band(s['snoreScore'])})")
     print(f"  report: {report}")
     if not a.no_open:
         subprocess.run(["open", str(report)], check=False)

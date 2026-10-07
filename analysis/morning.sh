@@ -10,4 +10,5 @@ if [ ! -x "$HERE/.venv/bin/python" ]; then
 fi
 
 "$HERE/pull.sh"
-"$HERE/.venv/bin/python" "$HERE/analyze.py" "$@"
+"$HERE/.venv/bin/python" "$HERE/analyze.py" --no-open "$@"
+"$HERE/.venv/bin/python" "$HERE/dashboard.py"

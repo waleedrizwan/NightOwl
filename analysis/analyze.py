@@ -31,8 +31,10 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import wave
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -234,39 +236,98 @@ def levels(windows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return rms, dbfs(np.abs(windows).max(axis=1))
 
 
-def segment_frames(seg: Segment, model: YAMNet, clean_levels: bool, profiles: dict,
-                   dehum: bool = True, tones: dict | None = None):
-    """Yield (t_ms, rms, peak, raw_rms, scores[k, len(WATCH)]) per chunk, in order.
+# --------------------------------------------------------------------------- per-chunk work
+# Every 10-minute chunk is processed on its own core: hum removal, levels and
+# YAMNet don't depend on other chunks except through the 1 s tail a window can
+# reach back into, so the night is done in three parallel passes (tones, clean
+# audio to a scratch dir, frames) and only the stateful detector runs in order.
+
+def _performance_cores() -> int:
+    """More workers than performance cores is slower on Apple silicon (M4,
+    2026-10-09: 4 workers 30 s, 10 workers 48 s): the efficiency cores are slow
+    at this, the DSP is memory-bound and Core ML already fills the matrix units."""
+    try:
+        out = subprocess.run(["sysctl", "-n", "hw.perflevel0.physicalcpu"],
+                             capture_output=True, text=True, check=True).stdout
+        return int(out)
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return min(4, os.cpu_count() or 1)
+
+
+WORKERS = max(1, int(os.environ.get("OWL_WORKERS", 0)) or _performance_cores())
+_worker_model: YAMNet | None = None
+
+
+def _scratch(tmp: Path, i: int, kind: str = "") -> Path:
+    return tmp / f"{i:04d}{kind}.npy"
+
+
+def _chunk_tones(c: Chunk) -> list[float]:
+    return denoise.find_tones(pcm(c))
+
+
+def _prepare_chunk(i: int, c: Chunk, tones: list[float] | None, clean_levels: bool, tmp: Path):
+    """Pass 2: this chunk with every steady tone (its own + the night's), the 60 Hz
+    family and sub-audio jumps removed, saved for pass 3 and clips. With
+    clean_levels also its hiss-removed copy; returns that hiss profile."""
+    new = pcm(c).astype(np.float32) / 32768.0
+    if tones is not None:
+        new = denoise.remove_hum(new, tones=tones).astype(np.float32)
+    np.save(_scratch(tmp, i), new)
+    if not clean_levels:
+        return None
+    profile = denoise.noise_profile(new.astype(np.float64))
+    np.save(_scratch(tmp, i, "c"), denoise.denoise(new.astype(np.float64), profile).astype(np.float32))
+    return profile
+
+
+def _chunk_frames(i: int, c: Chunk, anchor_ms: int, clean_levels: bool, tmp: Path):
+    """Pass 3: (t_ms, rms, peak, raw_rms, scores[k, len(WATCH)]) for the frames
+    ending in this chunk.
 
     YAMNet always sees raw audio (as on the phone). With clean_levels the
     detector's rms/peak are measured on hiss-removed audio instead, so faint
-    snoring from a noisy mic can clear the loudness gate. Each chunk's hiss
-    profile is stored in `profiles` for cleaning clips later."""
-    tail = np.zeros(0, np.float32)
-    ctail = np.zeros(0, np.float32)
-    tail_start = 0                      # segment sample index of tail[0]
-    for c in seg.chunks:
-        new = pcm(c).astype(np.float32) / 32768.0
-        if dehum:   # every steady tone (this file's + the night's) + 60 Hz family + sub-audio jumps
-            if c.path not in tones:
-                tones[c.path] = denoise.find_tones(new)
-            new = denoise.remove_hum(new, tones=tones[c.path]).astype(np.float32)
-        profiles[c.path] = denoise.noise_profile(new.astype(np.float64))
-        buf = np.concatenate([tail, new])
-        cbuf = (np.concatenate([ctail, denoise.denoise(new.astype(np.float64), profiles[c.path]).astype(np.float32)])
-                if clean_levels else buf)
-        pos_before, pos_after = c.seg_offset, c.seg_offset + c.n
-        first = max(WIN, (pos_before // HOP + 1) * HOP)
-        ends = np.arange(first, pos_after + 1, HOP)
-        if len(ends):
-            raw_rms, raw_peak = levels(sliding_window_view(buf, WIN)[ends - WIN - tail_start])
-            rms, peak = (levels(sliding_window_view(cbuf, WIN)[ends - WIN - tail_start])
-                         if clean_levels else (raw_rms, raw_peak))
-            cls = sliding_window_view(buf, CLS_WIN)[ends - CLS_WIN - tail_start]
-            t_ms = seg.anchor_ms + (ends - WIN) * 1000 // SR   # window START (spec §0)
-            yield t_ms, rms, peak, raw_rms, model.scores(cls)
-        keep = min(len(buf), WIN)
-        tail, ctail, tail_start = buf[-keep:], cbuf[-keep:], pos_after - keep
+    snoring from a noisy mic can clear the loudness gate."""
+    global _worker_model
+    if _worker_model is None:
+        _worker_model = YAMNet()
+
+    def with_tail(kind: str) -> np.ndarray:
+        new = np.load(_scratch(tmp, i, kind))
+        if c.seg_offset == 0:
+            return new
+        return np.concatenate([np.load(_scratch(tmp, i - 1, kind), mmap_mode="r")[-WIN:], new])
+
+    buf = with_tail("")
+    cbuf = with_tail("c") if clean_levels else buf
+    tail_start = c.seg_offset - (len(buf) - c.n)      # segment sample index of buf[0]
+    pos_before, pos_after = c.seg_offset, c.seg_offset + c.n
+    first = max(WIN, (pos_before // HOP + 1) * HOP)
+    ends = np.arange(first, pos_after + 1, HOP)
+    if not len(ends):
+        return None
+    raw_rms, raw_peak = levels(sliding_window_view(buf, WIN)[ends - WIN - tail_start])
+    rms, peak = (levels(sliding_window_view(cbuf, WIN)[ends - WIN - tail_start])
+                 if clean_levels else (raw_rms, raw_peak))
+    cls = sliding_window_view(buf, CLS_WIN)[ends - CLS_WIN - tail_start]
+    t_ms = anchor_ms + (ends - WIN) * 1000 // SR   # window START (spec §0)
+    return t_ms, rms, peak, raw_rms, _worker_model.scores(cls)
+
+
+def _chunk_profile(i: int, tmp: Path) -> np.ndarray:
+    return denoise.noise_profile(np.load(_scratch(tmp, i)).astype(np.float64))
+
+
+def _write_clip(seg: Segment, s0: int, n: int, clip_dir: Path, name: str,
+                tones: list[float] | None, profile: np.ndarray | None) -> None:
+    """Writes the original and a hiss-removed, turned-up copy."""
+    audio = seg.read(s0, s0 + n)
+    with wave.open(str(clip_dir / name.replace(".wav", "_original.wav")), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR)
+        w.writeframes(audio.tobytes())
+    x = audio.astype(np.float64) / 32768
+    clean = denoise.denoise(denoise.remove_hum(x, tones=tones) if tones is not None else x, profile)
+    denoise.write_wav(str(clip_dir / name), denoise.boost(clean))
 
 
 # --------------------------------------------------------------------------- analysis
@@ -276,7 +337,14 @@ def analyze(night_dir: Path, out_dir: Path, clean_levels: bool = False,
     segments = load_segments(night_dir)
     if not segments:
         raise SystemExit(f"no recordings in {night_dir}")
-    model = YAMNet()
+    with ProcessPoolExecutor(WORKERS) as pool, tempfile.TemporaryDirectory(prefix="nightowl-") as tmp:
+        return _analyze(segments, night_dir, out_dir, clean_levels, overrides, mode, dehum,
+                        pool, Path(tmp))
+
+
+def _analyze(segments: list[Segment], night_dir: Path, out_dir: Path, clean_levels: bool,
+             overrides: dict | None, mode: str, dehum: bool,
+             pool: ProcessPoolExecutor, tmp: Path) -> dict:
     params = DetectorParams.with_overrides(overrides or {})
     profiles: dict = {}
     tones: dict = {}      # chunk path -> steady tones found in it (denoise.find_tones)
@@ -293,22 +361,36 @@ def analyze(night_dir: Path, out_dir: Path, clean_levels: bool = False,
             elif o["type"] == "EpisodeDiscarded":
                 discarded += 1
 
+    chunks = [(si, seg, c) for si, seg in enumerate(segments) for c in seg.chunks]
+    index = {c.path: i for i, (_, _, c) in enumerate(chunks)}
     if dehum:   # pass 1: steady tones per file, then add the night-wide ones to each file
-        per_file = {c.path: denoise.find_tones(pcm(c)) for seg in segments for c in seg.chunks}
+        per_file = dict(zip(index, pool.map(_chunk_tones, [c for _, _, c in chunks])))
         common = denoise.night_tones(list(per_file.values()))
         tones.update({k: denoise.merge_tones(v, common) for k, v in per_file.items()})
 
-    for si, seg in enumerate(segments):
-        if si:
+    # pass 2: hum-free audio per chunk; pass 3: its frames (each also reads the
+    # previous chunk's last second, so pass 2 must finish first)
+    prepared = [pool.submit(_prepare_chunk, i, c, tones.get(c.path), clean_levels, tmp)
+                for i, (_, _, c) in enumerate(chunks)]
+    for (_, _, c), fut in zip(chunks, prepared):
+        if (p := fut.result()) is not None:
+            profiles[c.path] = p
+    framed = [pool.submit(_chunk_frames, i, c, seg.anchor_ms, clean_levels, tmp)
+              for i, (_, seg, c) in enumerate(chunks)]
+
+    for (si, _, c), fut in zip(chunks, framed):
+        if si and c.seg_offset == 0:
             absorb(det.flush())         # capture gap (spec §0.2): flush, re-anchor
-        for t_ms, rms, peak, raw_rms, sc in segment_frames(seg, model, clean_levels, profiles, dehum, tones):
-            for k in range(len(t_ms)):
-                f = Frame(int(t_ms[k]), float(rms[k]), float(peak[k]),
-                          float(sc[k, 0]), float(sc[k, 1]))
-                absorb(det.process(f))
-                gate = min(max(det.nf + params.GATE_OFFSET_DB, params.GATE_CLAMP_LO),
-                           params.GATE_CLAMP_HI)
-                rows.append((f.t_ms, f.rms_dbfs, f.peak_dbfs, det.nf, gate, si, float(raw_rms[k]), *sc[k]))
+        if (res := fut.result()) is None:
+            continue
+        t_ms, rms, peak, raw_rms, sc = res
+        for k in range(len(t_ms)):
+            f = Frame(int(t_ms[k]), float(rms[k]), float(peak[k]),
+                      float(sc[k, 0]), float(sc[k, 1]))
+            absorb(det.process(f))
+            gate = min(max(det.nf + params.GATE_OFFSET_DB, params.GATE_CLAMP_LO),
+                       params.GATE_CLAMP_HI)
+            rows.append((f.t_ms, f.rms_dbfs, f.peak_dbfs, det.nf, gate, si, float(raw_rms[k]), *sc[k]))
     absorb(det.flush())
     elapsed = time.perf_counter() - started
 
@@ -331,22 +413,16 @@ def analyze(night_dir: Path, out_dir: Path, clean_levels: bool = False,
     def seg_for(t: int) -> Segment:
         return next((s for s in segments if s.anchor_ms <= t < s.end_ms), segments[-1])
 
+    clip_jobs = []      # written together, in parallel, once all are known
+
     def write_clip(name: str, t0: int, dur: int) -> str:
-        """Writes the original and a hiss-removed, turned-up copy; returns the clean one."""
+        """Queues the original and a hiss-removed, turned-up copy; returns the clean one."""
         seg = seg_for(t0 + CLIP_PREROLL_MS)
         s0 = (t0 - seg.anchor_ms) * SR // 1000
-        audio = seg.read(s0, s0 + dur * SR // 1000)
-        raw_name = name.replace(".wav", "_original.wav")
-        with wave.open(str(clip_dir / raw_name), "wb") as w:
-            w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR)
-            w.writeframes(audio.tobytes())
         # hiss profile of the chunk the clip starts in (measured over 10 minutes,
         # so a clip full of snoring is not mistaken for noise)
         chunk = next((c for c in seg.chunks if c.seg_offset <= max(0, s0) < c.seg_offset + c.n), seg.chunks[0])
-        x = audio.astype(np.float64) / 32768
-        clean = denoise.denoise(denoise.remove_hum(x, tones=tones.get(chunk.path)) if dehum else x,
-                                profiles.get(chunk.path))
-        denoise.write_wav(str(clip_dir / name), denoise.boost(clean))
+        clip_jobs.append((seg, s0, dur * SR // 1000, name, chunk.path))
         return f"clips/{name}"
 
     ep_out, faint, isolated = [], [], []
@@ -388,6 +464,15 @@ def analyze(night_dir: Path, out_dir: Path, clean_levels: bool = False,
         t0 = g["tMs"] - GASP_PREROLL_MS
         g["clip"] = write_clip(f"gasp_{local(g['tMs'], '%H-%M-%S')}.wav", t0, GASP_CLIP_MS)
         g["clipStartMs"] = t0
+
+    # hiss profiles only for the chunks clips start in (clean_levels already has them all)
+    need = sorted({p for *_, p in clip_jobs if p not in profiles}, key=index.get)
+    profiles.update(zip(need, pool.map(_chunk_profile, [index[p] for p in need], [tmp] * len(need))))
+    # longest first: one long bout (33 min on 2026-10-08) otherwise finishes last, alone
+    for fut in [pool.submit(_write_clip, seg, s0, n, clip_dir, name,
+                            tones.get(p) if dehum else None, profiles[p])
+                for seg, s0, n, name, p in sorted(clip_jobs, key=lambda j: -j[2])]:
+        fut.result()
 
     with open(out_dir / "frames.csv", "w", newline="") as fh:
         w = csv.writer(fh)

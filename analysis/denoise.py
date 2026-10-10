@@ -41,11 +41,14 @@ def _stft(x: np.ndarray) -> np.ndarray:
 def _istft(X: np.ndarray, length: int) -> np.ndarray:
     win = np.hanning(N_FFT + 1)[:-1]
     frames = np.fft.irfft(X, n=N_FFT, axis=1) * win
-    out = np.zeros(HOP * (len(frames) - 1) + N_FFT)
+    # overlap-add, one HOP-sized slice of every frame at a time (N_FFT is a multiple of HOP)
+    t, r = len(frames), N_FFT // HOP
+    out = np.zeros((t + r - 1, HOP))
     norm = np.zeros_like(out)
-    for i, f in enumerate(frames):
-        out[i * HOP:i * HOP + N_FFT] += f
-        norm[i * HOP:i * HOP + N_FFT] += win ** 2
+    for k, (part, w2) in enumerate(zip(np.split(frames, r, axis=1), np.split(win ** 2, r))):
+        out[k:k + t] += part
+        norm[k:k + t] += w2
+    out, norm = out.ravel(), norm.ravel()
     out /= np.maximum(norm, 1e-8)
     return out[N_FFT // 2:N_FFT // 2 + length]
 
@@ -120,12 +123,16 @@ def find_tones(x: np.ndarray, sr: int = 16000) -> list[float]:
     f = np.fft.rfftfreq(n, 1 / sr)
     L = 10 * np.log10(P + 1e-30)
     half = max(2, int(round(10.0 / (f[1] - f[0]))))
-    med = np.median(np.lib.stride_tricks.sliding_window_view(np.pad(L, half, mode="edge"), 2 * half + 1), axis=1)
-    prom = L - med
     is_peak = np.zeros_like(L, dtype=bool)
     is_peak[2:-2] = ((L[2:-2] >= L[1:-3]) & (L[2:-2] >= L[3:-1]) & (L[2:-2] >= L[:-4]) & (L[2:-2] >= L[4:]))
-    idx = np.where(is_peak & (prom >= TONE_PROMINENCE_DB) & (f >= TONE_MIN_HZ) & (f <= TONE_MAX_HZ))[0]
-    idx = idx[np.argsort(-prom[idx])][:TONE_MAX_COUNT]
+    # the ±10 Hz median only matters at local peaks, so take it there alone
+    # (a sliding median over all ~130k bins was most of this function's time)
+    cand = np.where(is_peak & (f >= TONE_MIN_HZ) & (f <= TONE_MAX_HZ))[0]
+    windows = np.lib.stride_tricks.sliding_window_view(np.pad(L, half, mode="edge"), 2 * half + 1)
+    prom = L[cand] - np.median(windows[cand], axis=1)
+    keep = prom >= TONE_PROMINENCE_DB
+    idx, prom = cand[keep], prom[keep]
+    idx = idx[np.argsort(-prom)][:TONE_MAX_COUNT]
     tones = []
     for i in idx:   # parabolic interpolation for a sub-bin frequency
         a, b, c = L[i - 1], L[i], L[i + 1]
@@ -158,6 +165,21 @@ def merge_tones(*lists: list[float], tol_hz: float = 0.2) -> list[float]:
     return out
 
 
+def _fast_len(n: int) -> int:
+    """Smallest 2^a·3^b·5^c >= n."""
+    best, p5 = 1 << max(0, (n - 1).bit_length()), 1
+    while p5 < best:
+        p35 = p5
+        while p35 < best:
+            m = p35
+            while m < n:
+                m *= 2
+            best = min(best, m)
+            p35 *= 3
+        p5 *= 5
+    return best
+
+
 def remove_hum(x: np.ndarray, sr: int = 16000, tones: list[float] | None = None) -> np.ndarray:
     """High-pass + 60 Hz family + every steady tone, zero phase. Same length as x.
     tones: from find_tones(); measured on x itself when omitted."""
@@ -165,7 +187,10 @@ def remove_hum(x: np.ndarray, sr: int = 16000, tones: list[float] | None = None)
     if tones is None:
         tones = find_tones(x, sr)
     pad = min(int(_PAD_S * sr), len(x) - 1)
-    xp = np.pad(x, (pad, pad), mode="reflect") if pad > 0 else x
+    # extra reflection on the right brings the FFT to a 2·3·5-smooth length:
+    # an awkward length (a clip, a file cut short) can be 5-8x slower
+    extra = _fast_len(len(x) + 2 * pad) - len(x) - 2 * pad if pad > 0 else 0
+    xp = np.pad(x, (pad, pad + extra), mode="reflect") if pad > 0 else x
     n = len(xp)
     X = np.fft.rfft(xp)
     f = np.fft.rfftfreq(n, 1 / sr)

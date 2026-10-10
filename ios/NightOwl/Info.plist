@@ -22,6 +22,13 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Night Owl downloads last night's recording from your bedside Pi over your home Wi-Fi and analyzes it on this iPhone.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

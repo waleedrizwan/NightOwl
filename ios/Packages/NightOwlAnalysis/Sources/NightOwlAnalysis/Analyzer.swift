@@ -65,7 +65,7 @@ public struct Analyzer: Sendable {
         let done = Counter()
         let parts = try await inLanes(chunks.count, lanes, perLane: { try YAMNet(computeUnits: computeUnits) }) { i, model in
             let (_, anchor, c) = chunks[i]
-            let clean = Hum.removeHum(try c.samples(), tones: tones[i]).map(Float.init)
+            let clean = Hum.removeHum(try c.samples(), tones: tones[i])
             let ends = Self.frameEnds(c).filter { $0 - Audio.window >= c.segmentOffset }
             let frames = try Self.frames(ends: ends, buffer: clean, bufferStart: c.segmentOffset, anchorMs: anchor, model: model)
             progress?("Listening", Double(done.increment()) / Double(chunks.count))

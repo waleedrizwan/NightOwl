@@ -16,9 +16,40 @@ let workers = option("--workers").flatMap(Int.init) ?? 2
 let framesOut = option("--frames")
 let cpu = args.contains("--cpu")
 args.removeAll { $0 == "--cpu" }
-guard let path = args.first else {
-    FileHandle.standardError.write("usage: owl-analyze NIGHT_DIR [--workers N] [--cpu] [--frames OUT.csv]\n".data(using: .utf8)!)
+guard var path = args.first else {
+    FileHandle.standardError.write("""
+        usage: owl-analyze NIGHT_DIR [--workers N] [--cpu] [--frames OUT.csv]
+               owl-analyze pi DOWNLOAD_DIR [NIGHT]   (token in $OWL_PI_TOKEN; downloads, then analyzes)
+
+        """.data(using: .utf8)!)
     exit(2)
+}
+@Sendable func say(_ s: String) { FileHandle.standardError.write((s + "\n").data(using: .utf8)!) }
+
+if path == "pi", args.count >= 2 {   // the phone's path: fetch from the Pi's file server first
+    let pi = PiClient(token: ProcessInfo.processInfo.environment["OWL_PI_TOKEN"] ?? "")
+    let status = try await pi.status()
+    say("Pi: recording=\(status.recording) stoppedToday=\(status.stoppedToday)")
+    let nights = try await pi.nights()
+    guard let listing = args.count >= 3 ? nights.first(where: { $0.night == args[2] }) : nights.last else {
+        say("no such night on the Pi (has: \(nights.map(\.night)))"); exit(1)
+    }
+    let t0 = Date()
+    let last = Tally2()
+    let dir = try await pi.download(listing, into: URL(fileURLWithPath: args[1])) { done, total in
+        let pct = Int(100 * done / max(total, 1))
+        if last.step(pct) { say("  downloaded \(pct)% of \(total / 1_000_000) MB") }
+    }
+    let secs = Date().timeIntervalSince(t0)
+    say(String(format: "downloaded %@ (%.0f MB) in %.1f s = %.1f MB/s", listing.night,
+               Double(listing.completeBytes) / 1e6, secs, Double(listing.completeBytes) / 1e6 / secs))
+    path = dir.path
+}
+
+final class Tally2: @unchecked Sendable {
+    private var last = -10
+    private let lock = NSLock()
+    func step(_ pct: Int) -> Bool { lock.lock(); defer { lock.unlock() }; if pct >= last + 10 { last = pct; return true }; return false }
 }
 
 let analyzer = Analyzer(workers: workers, computeUnits: cpu ? .cpuOnly : .all)

@@ -86,13 +86,13 @@ public enum Hum {
     /// Differs from denoise.py only in padding: 1 s of reflection each side as
     /// there, then zeros up to a power of two (Accelerate's real FFT size)
     /// instead of more reflection up to a 2·3·5-smooth size.
-    public static func removeHum(_ x: [Double], sampleRate sr: Double = 16_000, tones: [Double]) -> [Double] {
+    public static func removeHum(_ x: [Double], sampleRate sr: Double = 16_000, tones: [Double]) -> [Float] {
         let pad = min(Int(padSeconds * sr), x.count - 1)
         let used = x.count + 2 * pad
         var n = 1
         while n < used { n <<= 1 }
         let fft = RealFFT(count: n)
-        return fft.filter(count: n, fill: { i in
+        return fft.filter(keeping: pad..<pad + x.count, fill: { i in
             if i < pad { return x[pad - i] }                       // numpy "reflect": edge sample not repeated
             if i < pad + x.count { return x[i - pad] }
             if i < used { return x[2 * x.count - 2 - (i - pad)] }
@@ -115,7 +115,7 @@ public enum Hum {
                     spectrum.scale(bin: k, by: 1 - exp(-0.5 * z * z))
                 }
             }
-        }).withUnsafeBufferPointer { Array($0[pad..<pad + x.count]) }
+        })
     }
 
     static func median(_ v: [Double]) -> Double {
@@ -167,25 +167,27 @@ final class RealFFT {
         }
     }
 
-    /// irfft(rfft(signal) * gain), signal[i] = fill(i) for i < n.
-    func filter(count n: Int, fill: (Int) -> Double, gain: (Spectrum) -> Void) -> [Double] {
-        let h = n / 2
+    /// irfft(rfft(signal) * gain)[keep] as Float, signal[i] = fill(i) for i < n.
+    /// Works in place in the two half-length arrays: no full-length copies,
+    /// which matters on the phone (n is 2^24 for a 10-minute file).
+    func filter(keeping keep: Range<Int>, fill: (Int) -> Double, gain: (Spectrum) -> Void) -> [Float] {
+        let n = count, h = n / 2
         var re = [Double](unsafeUninitializedCapacity: h) { b, c in for k in 0..<h { b[k] = fill(2 * k) }; c = h }
         var im = [Double](unsafeUninitializedCapacity: h) { b, c in for k in 0..<h { b[k] = fill(2 * k + 1) }; c = h }
-        var out = [Double](repeating: 0, count: n)
         re.withUnsafeMutableBufferPointer { r in
             im.withUnsafeMutableBufferPointer { i in
                 var split = DSPDoubleSplitComplex(realp: r.baseAddress!, imagp: i.baseAddress!)
                 vDSP_fft_zripD(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
                 gain(Spectrum(re: r.baseAddress!, im: i.baseAddress!, half: h))
                 vDSP_fft_zripD(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Inverse))
-                out.withUnsafeMutableBytes { ob in
-                    vDSP_ztocD(&split, 1, ob.bindMemory(to: DSPDoubleComplex.self).baseAddress!, 2, vDSP_Length(h))
-                }
             }
         }
-        // forward is 2x numpy, inverse is n/2 x numpy's irfft: undo both
-        vDSP.multiply(1 / Double(2 * n), out, result: &out)
-        return out
+        // forward is 2x numpy, inverse is n/2 x numpy's irfft: undo both.
+        // Sample j sits in re[j/2] (even j) or im[j/2] (odd j).
+        let scale = 1 / Double(2 * n)
+        return [Float](unsafeUninitializedCapacity: keep.count) { b, c in
+            for (o, j) in keep.enumerated() { b[o] = Float((j & 1 == 0 ? re[j >> 1] : im[j >> 1]) * scale) }
+            c = keep.count
+        }
     }
 }

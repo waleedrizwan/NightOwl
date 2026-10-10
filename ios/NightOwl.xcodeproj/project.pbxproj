@@ -12,6 +12,8 @@
 		1D1499A14273D1A34263A094 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E9CA27576A2FE274BE2A838 /* Store.swift */; };
 		449ED6DC163F785AABE0A833 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CF9A3ADABAD6ED8CC045BB /* Theme.swift */; };
 		61EB5324327CC59653795D11 /* NightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5E07E22F175F6020EBBC019 /* NightView.swift */; };
+		85979EFC157C047DC046AC7A /* PhoneAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4598967F173C684B290614F4 /* PhoneAnalysis.swift */; };
+		CD4F89F674832432FF368B67 /* NightOwlAnalysis in Frameworks */ = {isa = PBXBuildFile; productRef = 9768E6D6D81F2725E0254B14 /* NightOwlAnalysis */; };
 		E829DC6CF7481ADED9CE274D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D3F75B5DF808E0E9AEAC0C2 /* RootView.swift */; };
 		ED0732388C49D1040960F57C /* TrendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B3165303200692B5BE59971 /* TrendsView.swift */; };
 /* End PBXBuildFile section */
@@ -19,15 +21,28 @@
 /* Begin PBXFileReference section */
 		1E3C3006E224836AD3B7FAD7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1E9CA27576A2FE274BE2A838 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
+		4598967F173C684B290614F4 /* PhoneAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneAnalysis.swift; sourceTree = "<group>"; };
 		49BB3548515B0688AD13A1C3 /* NightOwl.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NightOwl.entitlements; sourceTree = "<group>"; };
 		4B3165303200692B5BE59971 /* TrendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendsView.swift; sourceTree = "<group>"; };
 		4D3F75B5DF808E0E9AEAC0C2 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		505BDFBE5D06D74D6E476785 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		59CF9A3ADABAD6ED8CC045BB /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		919750C5FC44DF6FD6F45011 /* NightOwlApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightOwlApp.swift; sourceTree = "<group>"; };
+		994F324C4EEA365435471406 /* NightOwlAnalysis */ = {isa = PBXFileReference; lastKnownFileType = folder; name = NightOwlAnalysis; path = Packages/NightOwlAnalysis; sourceTree = SOURCE_ROOT; };
 		B5E07E22F175F6020EBBC019 /* NightView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightView.swift; sourceTree = "<group>"; };
 		C10A32505D6B38FEA7506675 /* NightOwl.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NightOwl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		19460CF5594CD4DC8EFC8257 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CD4F89F674832432FF368B67 /* NightOwlAnalysis in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		39643D3A8D470C2BDB7022C0 /* Products */ = {
@@ -42,6 +57,7 @@
 			isa = PBXGroup;
 			children = (
 				92F51FC20478668C580B1E19 /* NightOwl */,
+				AA08950ECB7B78ABC1A122D9 /* Packages */,
 				39643D3A8D470C2BDB7022C0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,12 +70,21 @@
 				49BB3548515B0688AD13A1C3 /* NightOwl.entitlements */,
 				919750C5FC44DF6FD6F45011 /* NightOwlApp.swift */,
 				B5E07E22F175F6020EBBC019 /* NightView.swift */,
+				4598967F173C684B290614F4 /* PhoneAnalysis.swift */,
 				4D3F75B5DF808E0E9AEAC0C2 /* RootView.swift */,
 				1E9CA27576A2FE274BE2A838 /* Store.swift */,
 				59CF9A3ADABAD6ED8CC045BB /* Theme.swift */,
 				4B3165303200692B5BE59971 /* TrendsView.swift */,
 			);
 			path = NightOwl;
+			sourceTree = "<group>";
+		};
+		AA08950ECB7B78ABC1A122D9 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				994F324C4EEA365435471406 /* NightOwlAnalysis */,
+			);
+			path = Packages;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -71,6 +96,7 @@
 			buildPhases = (
 				42A7B29B907F7B8BA7C0F724 /* Sources */,
 				30F19094F5677176DF0B6DD5 /* Resources */,
+				19460CF5594CD4DC8EFC8257 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -78,6 +104,7 @@
 			);
 			name = NightOwl;
 			packageProductDependencies = (
+				9768E6D6D81F2725E0254B14 /* NightOwlAnalysis */,
 			);
 			productName = NightOwl;
 			productReference = C10A32505D6B38FEA7506675 /* NightOwl.app */;
@@ -107,6 +134,9 @@
 			);
 			mainGroup = 5848CDD5B72F97420C3896AB;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BE3A3B2D2CBD89701982A158 /* XCLocalSwiftPackageReference "Packages/NightOwlAnalysis" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 39643D3A8D470C2BDB7022C0 /* Products */;
 			projectDirPath = "";
@@ -135,6 +165,7 @@
 			files = (
 				068D2E01DAB1F7B6E2566897 /* NightOwlApp.swift in Sources */,
 				61EB5324327CC59653795D11 /* NightView.swift in Sources */,
+				85979EFC157C047DC046AC7A /* PhoneAnalysis.swift in Sources */,
 				E829DC6CF7481ADED9CE274D /* RootView.swift in Sources */,
 				1D1499A14273D1A34263A094 /* Store.swift in Sources */,
 				449ED6DC163F785AABE0A833 /* Theme.swift in Sources */,
@@ -332,6 +363,20 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		BE3A3B2D2CBD89701982A158 /* XCLocalSwiftPackageReference "Packages/NightOwlAnalysis" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/NightOwlAnalysis;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9768E6D6D81F2725E0254B14 /* NightOwlAnalysis */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NightOwlAnalysis;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1919A3EF7682D630C80157B1 /* Project object */;
 }

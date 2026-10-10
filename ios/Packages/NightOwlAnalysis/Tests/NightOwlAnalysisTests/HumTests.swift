@@ -6,8 +6,8 @@ final class HumTests: XCTestCase {
     func testFilterWithUnitGainIsIdentity() {
         let n = 4096
         let x = (0..<n).map { sin(Double($0) * 0.37) + 0.2 * cos(Double($0) * 1.9) + 0.05 }
-        let y = RealFFT(count: n).filter(count: n, fill: { x[$0] }, gain: { _ in })
-        XCTAssertEqual(zip(x, y).map { abs($0 - $1) }.max()!, 0, accuracy: 1e-12)
+        let y = RealFFT(count: n).filter(keeping: 0..<n, fill: { x[$0] }, gain: { _ in })
+        XCTAssertEqual(zip(x, y).map { abs($0 - Double($1)) }.max()!, 0, accuracy: 1e-6)   // Float output
     }
 
     /// The hum removal takes out a strong 60 Hz line and a found tone and keeps speech-band sound.
@@ -22,7 +22,7 @@ final class HumTests: XCTestCase {
         XCTAssertTrue(tones.contains { abs($0 - 55.6) < 0.1 }, "found \(tones.prefix(5))")
         XCTAssertTrue(tones.contains { abs($0 - 440) < 0.1 }, "a steady sine is a tone too")
         // remove only the 55.6 Hz line (plus the built-in 60 Hz family): 440 Hz must survive
-        let y = Hum.removeHum(x, tones: tones.filter { abs($0 - 440) > 1 })
+        let y = Hum.removeHum(x, tones: tones.filter { abs($0 - 440) > 1 }).map(Double.init)
         let mid = (n / 3)..<(2 * n / 3)
         func amplitude(_ s: [Double], _ hz: Double) -> Double {
             var c = 0.0, d = 0.0

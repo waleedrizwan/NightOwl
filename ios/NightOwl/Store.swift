@@ -45,11 +45,23 @@ extension Date {
 final class Store {
     static let shared = Store()
 
-    private(set) var nights: [Night] = []
+    /// Nights the Mac published (iCloud) and nights analyzed on this iPhone.
+    /// The Mac's copy wins when both exist: for now only it has clips.
+    var nights: [Night] {
+        var byDir = Dictionary(phoneNights.map { ($0.dir, $0) }, uniquingKeysWith: { $1 })
+        for n in macNights { byDir[n.dir] = n }
+        return byDir.values.sorted { $0.dir < $1.dir }
+    }
+    private var macNights: [Night] = []
+    private(set) var phoneNights: [Night] = []
     private(set) var loading = false
-    private(set) var error: String?
+    var error: String?
     private(set) var hasFolder = false
-    var openNight: String?            // set by a notification tap
+    var openNight: String?            // set by a notification tap or a finished analysis
+    var job: Job?                     // analysis on this iPhone in progress (PhoneAnalysis.swift)
+    var piToken: String? = Keychain.get("token") {
+        didSet { Keychain.set("token", piToken) }
+    }
 
     private let bookmarkKey = "folderBookmark"
     private let pendingTokenKey = "pendingDeviceToken"
@@ -57,12 +69,30 @@ final class Store {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("nights.json")
     }
+    private var phoneNightsURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("phone-nights.json")
+    }
 
     init() {
         hasFolder = UserDefaults.standard.data(forKey: bookmarkKey) != nil
         if let data = try? Data(contentsOf: cacheURL), let p = try? JSONDecoder().decode(Payload.self, from: data) {
-            nights = p.nights
+            macNights = p.nights
         }
+        if let data = try? Data(contentsOf: phoneNightsURL), let p = try? JSONDecoder().decode(Payload.self, from: data) {
+            phoneNights = p.nights
+        }
+    }
+
+    /// Analyzed here, and the Mac hasn't published its own copy (yet).
+    func isPhoneOnly(_ n: Night) -> Bool {
+        !macNights.contains { $0.dir == n.dir } && phoneNights.contains { $0.dir == n.dir }
+    }
+
+    func savePhoneNight(_ n: Night) {
+        phoneNights = (phoneNights.filter { $0.dir != n.dir } + [n]).sorted { $0.dir < $1.dir }
+        try? FileManager.default.createDirectory(at: phoneNightsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(Payload(nights: phoneNights)).write(to: phoneNightsURL, options: .atomic)
     }
 
     var latest: Night? { nights.last }
@@ -125,7 +155,7 @@ final class Store {
                 try withFolder { try Store.read($0.appendingPathComponent("nights.json")) }
             }.value
             let p = try JSONDecoder().decode(Payload.self, from: data)
-            nights = p.nights
+            macNights = p.nights
             error = nil
             try? data.write(to: cacheURL, options: .atomic)
         } catch {

@@ -5,12 +5,19 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+packages:
+  NightOwlAnalysis:
+    path: Packages/NightOwlAnalysis
+
 targets:
   NightOwl:
     type: application
     platform: iOS
     sources:
       - NightOwl
+    dependencies:
+      - package: NightOwlAnalysis
+        product: NightOwlAnalysis
     entitlements:
       path: NightOwl/NightOwl.entitlements
       properties:
@@ -28,6 +35,13 @@ targets:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes:
           - remote-notification
+        # "I'm up" fetches the night straight from the Pi's file server
+        # (recorder/serve.py), plain HTTP on the home network.
+        NSLocalNetworkUsageDescription: >-
+          Night Owl downloads last night's recording from your bedside Pi over
+          your home Wi-Fi and analyzes it on this iPhone.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.waleedrizwan.NightOwl

@@ -7,10 +7,10 @@ HOST="${OWL_HOST:-nightowl}"
 
 echo "Installing the recorder on $HOST"
 ssh "$HOST" 'mkdir -p ~/nightowl ~/nights'
-scp -q "$HERE/record.sh" "$HOST:nightowl/record.sh"
+scp -q "$HERE/record.sh" "$HERE/stop.sh" "$HOST:nightowl/"
 # Replace any earlier recorder entries (including the pre-rename dreamcatcher/ one)
 # so two recorders never fight over the mic.
-ssh "$HOST" 'chmod +x ~/nightowl/record.sh &&
+ssh "$HOST" 'chmod +x ~/nightowl/record.sh ~/nightowl/stop.sh &&
   { crontab -l 2>/dev/null | grep -v -E "(nightowl|dreamcatcher)/record\.sh" || true
     echo "*/5 * * * * $HOME/nightowl/record.sh"
     echo "@reboot $HOME/nightowl/record.sh"; } | crontab - &&

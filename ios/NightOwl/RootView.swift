@@ -28,6 +28,7 @@ struct TonightTab: View {
                     Welcome()
                 }
             }
+            .safeAreaInset(edge: .top) { WakeCard() }
             .navigationTitle("Night Owl")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -46,6 +47,59 @@ struct TonightTab: View {
                 }
             }
             .sheet(isPresented: $settings) { SettingsView() }
+        }
+    }
+}
+
+/// "I'm up": stop the Pi and get the report now instead of at 12:15.
+struct WakeCard: View {
+    @Environment(Store.self) private var store
+    @State private var sending = false
+
+    var body: some View {
+        TimelineView(.everyMinute) { _ in
+            if store.hasFolder, store.waitingForReport {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Building your report").font(.subheadline.weight(.semibold))
+                        Text("Recording stopped. Copying the audio off the Pi takes about half an hour.")
+                            .font(.caption).foregroundStyle(Theme.muted)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .background(Theme.card, in: .rect(cornerRadius: 14))
+                .padding(.horizontal).padding(.top, 6)
+                .task {
+                    while !Task.isCancelled, store.waitingForReport {
+                        try? await Task.sleep(for: .seconds(20))
+                        await store.refresh()
+                    }
+                }
+            } else if store.hasFolder, store.isRecording {
+                Button {
+                    sending = true
+                    Task { await store.wake(); sending = false }
+                } label: {
+                    HStack {
+                        Image(systemName: "sun.max.fill")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("I'm up").font(.headline)
+                            Text("Stop recording and get last night's report")
+                                .font(.caption).opacity(0.75)
+                        }
+                        Spacer()
+                        if sending { ProgressView().tint(.black) }
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity)
+                    .background(Theme.amber, in: .rect(cornerRadius: 14))
+                    .foregroundStyle(.black)
+                }
+                .disabled(sending)
+                .padding(.horizontal).padding(.top, 6)
+            }
         }
     }
 }

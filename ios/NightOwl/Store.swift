@@ -145,6 +145,51 @@ final class Store {
         return local
     }
 
+    // MARK: "I'm up"
+
+    /// The Pi records 02:00–12:00; the Mac files each night under the date it was recorded.
+    var hasTodaysNight: Bool { latest?.dir == Night.dayFormat.string(from: .now) }
+
+    var isRecording: Bool {
+        let hour = Calendar.current.component(.hour, from: .now)
+        return (2..<12).contains(hour) && !hasTodaysNight
+    }
+
+    /// When the user last pressed "I'm up"; cleared once today's night shows up.
+    var wokeAt: Date? {
+        get { access(keyPath: \.wokeAt); return UserDefaults.standard.object(forKey: "wokeAt") as? Date }
+        set { withMutation(keyPath: \.wokeAt) { UserDefaults.standard.set(newValue, forKey: "wokeAt") } }
+    }
+
+    var waitingForReport: Bool {
+        guard let w = wokeAt, Calendar.current.isDateInToday(w) else { return false }
+        return !hasTodaysNight
+    }
+
+    /// The Mac's wake.sh watches the iCloud folder for wake.json: it stops the Pi
+    /// and runs the morning report.
+    @MainActor
+    func wake() async {
+        do {
+            try await Task.detached { [self] in
+                try withFolder { folder in
+                    let file = folder.appendingPathComponent("wake.json")
+                    let body = try JSONEncoder().encode(["at": ISO8601DateFormatter().string(from: .now)])
+                    var coordError: NSError?
+                    var writeError: Error?
+                    NSFileCoordinator().coordinate(writingItemAt: file, options: .forReplacing, error: &coordError) { u in
+                        do { try body.write(to: u, options: .atomic) } catch { writeError = error }
+                    }
+                    if let e = coordError ?? writeError { throw e }
+                }
+            }.value
+            wokeAt = .now
+            error = nil
+        } catch {
+            self.error = (error as? OwlError)?.message ?? "Couldn't reach your Mac: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: push
 
     /// The Mac's notify.py reads devices.json from the same iCloud folder.

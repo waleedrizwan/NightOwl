@@ -5,7 +5,8 @@
 # Cron runs it every 5 minutes and on boot; outside the window it exits
 # silently, so a power blip or a missed start costs at most 5 minutes. Unplugging the mic is the
 # off switch: arecord fails, we retry every 30 s until the mic comes back
-# or the window ends.
+# or the window ends. stop.sh ends the night early (the app's "I'm up"):
+# it marks today as done, so the cron ticks until END don't start it again.
 #
 # Processing happens on the Mac; this script only records.
 set -u
@@ -20,6 +21,7 @@ DEVICE="${OWL_DEVICE:-plughw:CARD=Device,DEV=0}"
 CHUNK_SECS="${OWL_CHUNK_SECS:-600}"
 ROOT="${OWL_ROOT:-$HOME/nights}"
 LOG="${OWL_LOG:-$HOME/nightowl/record.log}"
+STOPPED="$HOME/nightowl/stopped"     # holds the date of a night ended by stop.sh
 
 mkdir -p "$(dirname "$LOG")" "$ROOT"
 log() { echo "$(date '+%F %T %Z') $*" >> "$LOG"; }
@@ -45,7 +47,10 @@ in_window() {
   [ "$now" -ge "$(to_secs "today $START")" ] && [ "$now" -lt "$(to_secs "today $END")" ]
 }
 
+stopped_today() { [ "$(cat "$STOPPED" 2>/dev/null)" = "$(date +%F)" ]; }
+
 in_window || exit 0   # the common case: cron tick outside sleep hours, stay quiet
+stopped_today && exit 0
 log "started (window $START-$END $TZ, device $DEVICE)"
 while :; do
   now=$(date +%s)
@@ -66,6 +71,7 @@ while :; do
   rc=$?
 
   [ "$(date +%s)" -ge "$end" ] && { log "window ended"; exit 0; }
+  stopped_today && { log "stopped early (woke up)"; exit 0; }
   log "arecord exited early (rc=$rc), mic unplugged? retrying in 30s"
   sleep 30
 done

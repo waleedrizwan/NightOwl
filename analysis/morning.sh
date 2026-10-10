@@ -3,6 +3,12 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# The 12:15 run and the app's "I'm up" (wake.sh) can overlap: take turns.
+if [ -z "${OWL_MORNING_LOCKED:-}" ]; then
+  mkdir -p "${OWL_DATA:-$HOME/NightOwl}"
+  OWL_MORNING_LOCKED=1 exec lockf -t 3600 "${OWL_DATA:-$HOME/NightOwl}/.morning.lock" "$0" "$@"
+fi
+
 if [ ! -x "$HERE/.venv/bin/python" ]; then
   echo "Setting up the analysis environment (one time)…"
   uv venv --python 3.11 "$HERE/.venv" -q

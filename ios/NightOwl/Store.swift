@@ -22,6 +22,8 @@ struct Night: Codable, Identifiable, Hashable {
     var start: Date { .init(ms: startMs) }
     var end: Date { .init(ms: endMs) }
     var snoreMinutes: Double { Double(snoreMs) / 60_000 }
+    /// Every bout and gasp has a clip (the analysis caps bout clips at 200).
+    var hasClips: Bool { bouts.prefix(200).allSatisfy { $0.clip != nil } && gasps.allSatisfy { $0.clip != nil } }
 
     static let dayFormat: DateFormatter = {
         let f = DateFormatter()
@@ -46,10 +48,11 @@ final class Store {
     static let shared = Store()
 
     /// Nights the Mac published (iCloud) and nights analyzed on this iPhone.
-    /// The Mac's copy wins when both exist: for now only it has clips.
+    /// The iPhone's copy wins once it has its clips (same numbers, and its clips
+    /// play without iCloud); one made before clips existed defers to the Mac's.
     var nights: [Night] {
-        var byDir = Dictionary(phoneNights.map { ($0.dir, $0) }, uniquingKeysWith: { $1 })
-        for n in macNights { byDir[n.dir] = n }
+        var byDir = Dictionary(macNights.map { ($0.dir, $0) }, uniquingKeysWith: { $1 })
+        for n in phoneNights where n.hasClips || byDir[n.dir] == nil { byDir[n.dir] = n }
         return byDir.values.sorted { $0.dir < $1.dir }
     }
     private var macNights: [Night] = []
@@ -84,10 +87,8 @@ final class Store {
         }
     }
 
-    /// Analyzed here, and the Mac hasn't published its own copy (yet).
-    func isPhoneOnly(_ n: Night) -> Bool {
-        !macNights.contains { $0.dir == n.dir } && phoneNights.contains { $0.dir == n.dir }
-    }
+    /// The version shown came from this iPhone.
+    func isFromPhone(_ n: Night) -> Bool { phoneNights.contains(n) }
 
     func savePhoneNight(_ n: Night) {
         phoneNights = (phoneNights.filter { $0.dir != n.dir } + [n]).sorted { $0.dir < $1.dir }
@@ -164,7 +165,11 @@ final class Store {
     }
 
     /// Copies a clip out of iCloud into the cache so AVAudioPlayer can play it.
+    /// Clips made on this iPhone are already local.
     func clipFile(_ path: String) async throws -> URL {
+        if path.hasPrefix(Store.phoneClipsPrefix) {
+            return Store.phoneClipsRoot.deletingLastPathComponent().appendingPathComponent(path)
+        }
         let local = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(path.replacingOccurrences(of: "/", with: "_"))
         if FileManager.default.fileExists(atPath: local.path) { return local }

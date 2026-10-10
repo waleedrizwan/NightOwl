@@ -14,11 +14,12 @@ func option(_ name: String) -> String? {
 }
 let workers = option("--workers").flatMap(Int.init) ?? 2
 let framesOut = option("--frames")
-let cpu = args.contains("--cpu")
-args.removeAll { $0 == "--cpu" }
+let clipsOut = option("--clips")
+let cpu = args.contains("--cpu"), wav = args.contains("--wav")
+args.removeAll { $0 == "--cpu" || $0 == "--wav" }
 guard var path = args.first else {
     FileHandle.standardError.write("""
-        usage: owl-analyze NIGHT_DIR [--workers N] [--cpu] [--frames OUT.csv]
+        usage: owl-analyze NIGHT_DIR [--workers N] [--cpu] [--frames OUT.csv] [--clips DIR [--wav]]
                owl-analyze pi DOWNLOAD_DIR [NIGHT]   (token in $OWL_PI_TOKEN; downloads, then analyzes)
 
         """.data(using: .utf8)!)
@@ -64,6 +65,12 @@ if let framesOut {
     }
     try csv.write(toFile: framesOut, atomically: true, encoding: .utf8)
 }
+var report = result.report
+if let clipsOut {
+    let t0 = Date()
+    report = try Clips.write(result, into: URL(fileURLWithPath: clipsOut), prefix: "clips/", format: wav ? .wav : .aac)
+    say(String(format: "wrote %d clips in %.1f s", report.bouts.count + report.gasps.count, Date().timeIntervalSince(t0)))
+}
 let encoder = JSONEncoder()
 encoder.outputFormatting = [.sortedKeys]
-print(String(decoding: try encoder.encode(result.report), as: UTF8.self))
+print(String(decoding: try encoder.encode(report), as: UTF8.self))

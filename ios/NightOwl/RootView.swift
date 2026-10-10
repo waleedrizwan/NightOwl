@@ -11,7 +11,7 @@ struct RootView: View {
             TrendsView().tag(1).tabItem { Label("Trends", systemImage: "chart.bar.fill") }
             HistoryView().tag(2).tabItem { Label("History", systemImage: "calendar") }
         }
-        .onChange(of: store.openNight) { _, n in if n != nil { tab = 0 } }
+        .onChange(of: store.openNight) { _, n in if n != nil { tab = 0; store.openNight = nil } }   // nil again so the next one registers
         .task { await store.refresh() }
     }
 }

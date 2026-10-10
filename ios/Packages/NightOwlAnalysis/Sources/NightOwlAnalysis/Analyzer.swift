@@ -45,6 +45,10 @@ public struct Analyzer: Sendable {
         public let frames: [Frame]
         public let tonesPerFile: [String: [Double]]
         public let seconds: Double
+        // for the clips (Clips.swift): per chunk, in segment order
+        let segments: [Segment]
+        let tones: [[Double]]
+        let profiles: [[Float]]
     }
 
     public func analyze(night dir: URL, progress: (@Sendable (String, Double) -> Void)? = nil) async throws -> Result {
@@ -68,8 +72,10 @@ public struct Analyzer: Sendable {
             let clean = Hum.removeHum(try c.samples(), tones: tones[i])
             let ends = Self.frameEnds(c).filter { $0 - Audio.window >= c.segmentOffset }
             let frames = try Self.frames(ends: ends, buffer: clean, bufferStart: c.segmentOffset, anchorMs: anchor, model: model)
+            // hiss profile of the whole file, for cleaning the clips that start in it
+            let profile = Denoise.noiseProfile(clean)
             progress?("Listening", Double(done.increment()) / Double(chunks.count))
-            return (frames, head: Array(clean.prefix(Audio.window)), tail: Array(clean.suffix(Audio.window)))
+            return (frames, head: Array(clean.prefix(Audio.window)), tail: Array(clean.suffix(Audio.window)), profile: profile)
         }
         let model = try YAMNet(computeUnits: computeUnits)
         var frames: [Frame] = []
@@ -98,7 +104,8 @@ public struct Analyzer: Sendable {
                                       bouts: Self.bouts(frames), gasps: Self.gasps(frames))
         return Result(report: report, frames: frames,
                       tonesPerFile: Dictionary(uniqueKeysWithValues: zip(chunks.map { $0.2.url.lastPathComponent }, tones)),
-                      seconds: Date().timeIntervalSince(started))
+                      seconds: Date().timeIntervalSince(started),
+                      segments: segments, tones: tones, profiles: parts.map(\.profile))
     }
 
     /// Segment sample indices where this chunk's frames end (analyze.py: `ends`).

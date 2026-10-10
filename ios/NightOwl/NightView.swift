@@ -36,7 +36,7 @@ struct NightView: View {
             if let delta {
                 Text(delta).font(.subheadline).foregroundStyle(Theme.muted)
             }
-            if store.isPhoneOnly(night) {
+            if store.isFromPhone(night) {
                 Label("Analyzed on this iPhone", systemImage: "iphone").font(.caption).foregroundStyle(Theme.muted)
             }
         }

@@ -103,7 +103,7 @@ enum Recording {
                 guard u16(f + 2) == 1, u32(f + 4) == Audio.sampleRate, u16(f + 14) == 16 else {
                     throw RecordingError.wrongFormat(name)
                 }
-                let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as! Int
+                let size = try FileManager.default.attributesOfItem(atPath: url.resolvingSymlinksInPath().path)[.size] as! Int
                 return (i + 8, (size - i - 8) / 2)
             }
             i += 8 + size + (size & 1)

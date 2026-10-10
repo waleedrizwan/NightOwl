@@ -36,8 +36,8 @@ final class YAMNet {
     func scores(_ windows: [ArraySlice<Float>]) throws -> [[Float]] {
         var out: [[Float]] = []
         out.reserveCapacity(windows.count)
-        for start in stride(from: 0, to: windows.count, by: 256) {
-            let batch = try windows[start..<min(start + 256, windows.count)].map { w -> MLFeatureProvider in
+        for start in stride(from: 0, to: windows.count, by: 64) {
+            let batch = try windows[start..<min(start + 64, windows.count)].map { w -> MLFeatureProvider in
                 let a = try MLMultiArray(shape: [NSNumber(value: Audio.classifierWindow)], dataType: .float32)
                 var peak: Float = 0
                 for v in w { peak = max(peak, abs(v)) }

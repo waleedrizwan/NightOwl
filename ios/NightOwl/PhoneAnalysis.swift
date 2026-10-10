@@ -47,9 +47,16 @@ extension Store {
     // MARK: the job
 
     /// Audio lives in Caches (iOS may purge it; it's re-downloadable) and only
-    /// the newest night is kept, for clips.
+    /// the newest night is kept, to remake its clips if needed.
     static var audioRoot: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("nights")
+    }
+
+    /// Clips made here: Application Support/phone-clips/<night>/*.m4a, referred
+    /// to in the night as "phone-clips/<night>/<name>" (the Mac's are "clips/…" in iCloud).
+    static let phoneClipsPrefix = "phone-clips/"
+    static var phoneClipsRoot: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("phone-clips")
     }
 
     @MainActor
@@ -88,7 +95,14 @@ extension Store {
             let result = try await Analyzer(workers: 2).analyze(night: dir) { stage, fraction in
                 Task { @MainActor in self.job = Job(stage: stage, fraction: fraction) }
             }
-            let night = try JSONDecoder().decode(Night.self, from: JSONEncoder().encode(result.report))
+            job = Job(stage: "Making clips", fraction: 0)
+            let report = try await Task.detached(priority: .userInitiated) {
+                try Clips.write(result, into: Self.phoneClipsRoot.appendingPathComponent(listing.night),
+                                prefix: "\(Self.phoneClipsPrefix)\(listing.night)/") { f in
+                    Task { @MainActor in self.job?.fraction = f }
+                }
+            }.value
+            let night = try JSONDecoder().decode(Night.self, from: JSONEncoder().encode(report))
             savePhoneNight(night)
             error = nil
             openNight = night.dir

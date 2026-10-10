@@ -84,13 +84,12 @@ public enum Hum {
     /// steady tone, zero phase. Same length as x.
     ///
     /// Differs from denoise.py only in padding: 1 s of reflection each side as
-    /// there, then zeros up to a power of two (Accelerate's real FFT size)
-    /// instead of more reflection up to a 2·3·5-smooth size.
+    /// there, then zeros up to a length Accelerate's DFT takes (f·2^k, f in
+    /// 1, 3, 5, 15) instead of more reflection up to a 2·3·5-smooth length.
     public static func removeHum(_ x: [Double], sampleRate sr: Double = 16_000, tones: [Double]) -> [Float] {
         let pad = min(Int(padSeconds * sr), x.count - 1)
         let used = x.count + 2 * pad
-        var n = 1
-        while n < used { n <<= 1 }
+        let n = RealFFT.length(atLeast: used)
         let fft = RealFFT(count: n)
         return fft.filter(keeping: pad..<pad + x.count, fill: { i in
             if i < pad { return x[pad - i] }                       // numpy "reflect": edge sample not repeated
@@ -124,21 +123,43 @@ public enum Hum {
     }
 }
 
-/// Real FFT of a power-of-two length in numpy's conventions (unscaled forward,
-/// irfft divides by n), over Accelerate's packed split-complex format.
+/// Real FFT in numpy's conventions (unscaled forward, irfft divides by n),
+/// over Accelerate's DFT and its packed split-complex format.
+///
+/// Setups are made once per length and shared by every thread for the life
+/// of the app: Accelerate never gives a setup's memory back (each new 10.5M
+/// point setup costs ~80 MB more, even after it's destroyed), and the old
+/// vDSP_fft API wanted ~800 MB for 2^24 points.
 final class RealFFT {
     let count: Int
-    private let log2n: vDSP_Length
-    private let setup: FFTSetupD
+    private let forward: vDSP_DFT_SetupD
+    private let inverse: vDSP_DFT_SetupD
 
-    init(count: Int) {
-        precondition(count > 0 && count & (count - 1) == 0, "power of two")
-        self.count = count
-        log2n = vDSP_Length(count.trailingZeroBitCount)
-        setup = vDSP_create_fftsetupD(log2n, FFTRadix(kFFTRadix2))!
+    private static var setups: [Int: (vDSP_DFT_SetupD, vDSP_DFT_SetupD)] = [:]
+    private static let lock = NSLock()
+
+    /// The smallest length >= n that Accelerate's real DFT takes: f·2^k, f in 1, 3, 5, 15, k >= 4.
+    static func length(atLeast n: Int) -> Int {
+        [1, 3, 5, 15].map { f in
+            var m = f << 4
+            while m < n { m <<= 1 }
+            return m
+        }.min()!
     }
 
-    deinit { vDSP_destroy_fftsetupD(setup) }
+    init(count: Int) {
+        self.count = count
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        if let s = Self.setups[count] {
+            (forward, inverse) = s
+        } else {
+            let f = vDSP_DFT_zrop_CreateSetupD(nil, vDSP_Length(count), .FORWARD)!
+            let i = vDSP_DFT_zrop_CreateSetupD(f, vDSP_Length(count), .INVERSE)!
+            Self.setups[count] = (f, i)
+            (forward, inverse) = (f, i)
+        }
+    }
 
     /// power[k] += |X[k]|² for k in 0...n/2.
     func addPower(of x: [Double], into power: inout [Double]) {
@@ -150,10 +171,10 @@ final class RealFFT {
                 x.withUnsafeBytes { xb in
                     vDSP_ctozD(xb.bindMemory(to: DSPDoubleComplex.self).baseAddress!, 2, &split, 1, vDSP_Length(h))
                 }
-                vDSP_fft_zripD(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
+                vDSP_DFT_ExecuteD(forward, r.baseAddress!, i.baseAddress!, r.baseAddress!, i.baseAddress!)
             }
         }
-        // vDSP's forward real FFT is 2x numpy's; bin 0 holds DC (real) and Nyquist (imag)
+        // vDSP's forward real transform is 2x numpy's; bin 0 holds DC (real) and Nyquist (imag)
         power[0] += (re[0] / 2) * (re[0] / 2)
         power[h] += (im[0] / 2) * (im[0] / 2)
         for k in 1..<h { power[k] += (re[k] * re[k] + im[k] * im[k]) / 4 }
@@ -169,17 +190,16 @@ final class RealFFT {
 
     /// irfft(rfft(signal) * gain)[keep] as Float, signal[i] = fill(i) for i < n.
     /// Works in place in the two half-length arrays: no full-length copies,
-    /// which matters on the phone (n is 2^24 for a 10-minute file).
+    /// which matters on the phone (n is 5·2^21 for a 10-minute file).
     func filter(keeping keep: Range<Int>, fill: (Int) -> Double, gain: (Spectrum) -> Void) -> [Float] {
         let n = count, h = n / 2
         var re = [Double](unsafeUninitializedCapacity: h) { b, c in for k in 0..<h { b[k] = fill(2 * k) }; c = h }
         var im = [Double](unsafeUninitializedCapacity: h) { b, c in for k in 0..<h { b[k] = fill(2 * k + 1) }; c = h }
         re.withUnsafeMutableBufferPointer { r in
             im.withUnsafeMutableBufferPointer { i in
-                var split = DSPDoubleSplitComplex(realp: r.baseAddress!, imagp: i.baseAddress!)
-                vDSP_fft_zripD(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
+                vDSP_DFT_ExecuteD(forward, r.baseAddress!, i.baseAddress!, r.baseAddress!, i.baseAddress!)
                 gain(Spectrum(re: r.baseAddress!, im: i.baseAddress!, half: h))
-                vDSP_fft_zripD(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Inverse))
+                vDSP_DFT_ExecuteD(inverse, r.baseAddress!, i.baseAddress!, r.baseAddress!, i.baseAddress!)
             }
         }
         // forward is 2x numpy, inverse is n/2 x numpy's irfft: undo both.

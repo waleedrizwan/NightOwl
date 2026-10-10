@@ -41,3 +41,26 @@ final class HumTests: XCTestCase {
         XCTAssertEqual(NightReport.band(9), "quiet")
     }
 }
+
+final class DenoiseTests: XCTestCase {
+    /// With a zero hiss profile every bin is far above it, the mask is 1, and
+    /// the STFT round trip must give back the signal minus its mean.
+    func testZeroProfileGivesTheSignalBack() {
+        let x: [Float] = (0..<20_000).map { Float(sin(Double($0) * 0.05) * 0.3 + 0.01) }
+        let y = Denoise.denoise(x, profile: [Float](repeating: 0, count: 513))
+        let mean = x.reduce(0, +) / Float(x.count)
+        XCTAssertEqual(y.count, x.count)
+        XCTAssertEqual(zip(x, y).map { abs($0 - mean - $1) }.max()!, 0, accuracy: 1e-4)
+    }
+
+    /// White noise measured as its own hiss is turned down to ~0.45x, as denoise.py
+    /// does (0.448 on the same kind of signal): its 20th-percentile profile sits
+    /// below most bins' peaks, so many are only partly gated.
+    func testHissAtTheProfileIsSuppressed() {
+        var g = SystemRandomNumberGenerator()
+        let x: [Float] = (0..<64_000).map { _ in Float.random(in: -0.01...0.01, using: &g) }
+        let y = Denoise.denoise(x, profile: Denoise.noiseProfile(x))
+        func rms(_ v: [Float]) -> Float { (v.map { $0 * $0 }.reduce(0, +) / Float(v.count)).squareRoot() }
+        XCTAssertEqual(rms(Array(y[8_000..<56_000])) / rms(Array(x[8_000..<56_000])), 0.448, accuracy: 0.02)
+    }
+}

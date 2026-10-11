@@ -42,6 +42,10 @@ targets:
           your home Wi-Fi and analyzes it on this iPhone.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # "I'm up" keeps going with the screen locked: an iOS 26
+        # continued-processing task per run (PhoneAnalysis.swift ContinuedJob)
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.waleedrizwan.NightOwl.analyze.*
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.waleedrizwan.NightOwl

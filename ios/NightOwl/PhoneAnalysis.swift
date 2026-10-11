@@ -1,3 +1,4 @@
+import BackgroundTasks
 import Foundation
 import NightOwlAnalysis
 import Security
@@ -59,19 +60,41 @@ extension Store {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("phone-clips")
     }
 
+    /// Stop (optionally), download, analyze and make clips. On iOS 26 this runs
+    /// as a continued-processing task, so it carries on with the screen locked
+    /// or another app open, with the system's own progress UI; otherwise (or if
+    /// the system won't start one) it runs here and needs the app kept open.
     @MainActor
     func analyzeOnPhone(stopFirst: Bool) async {
-        guard let pi, job == nil else { return }
+        guard pi != nil, job == nil else { return }
         job = Job(stage: stopFirst ? "Stopping the recorder" : "Connecting to the Pi")
         UIApplication.shared.isIdleTimerDisabled = true
-        let background = UIApplication.shared.beginBackgroundTask(withName: "Analyze night")
         defer {
             UIApplication.shared.isIdleTimerDisabled = false
-            UIApplication.shared.endBackgroundTask(background)
             job = nil
+        }
+        if #available(iOS 26, *),
+           await ContinuedJob.run(title: "Night Owl", subtitle: job?.stage ?? "", work: { report in
+               await self.runJob(stopFirst: stopFirst, report: report)
+           }) {
+            return
+        }
+        let background = UIApplication.shared.beginBackgroundTask(withName: "Analyze night")
+        defer { UIApplication.shared.endBackgroundTask(background) }
+        _ = await runJob(stopFirst: stopFirst) { _, _ in }
+    }
+
+    /// The job itself. report(stage, overall 0...1) feeds the system's progress UI.
+    @MainActor
+    private func runJob(stopFirst: Bool, report: @escaping @MainActor (String, Double) -> Void) async -> Bool {
+        guard let pi else { return false }
+        func set(_ stage: String, _ fraction: Double?, overall: Double) {
+            job = Job(stage: stage, fraction: fraction)
+            report(stage, overall)
         }
         do {
             if stopFirst {
+                set("Stopping the recorder", nil, overall: 0.01)
                 try await pi.stop()
                 wokeAt = .now
             }
@@ -81,33 +104,41 @@ extension Store {
                 throw PhoneError.nothingOnPi
             }
 
-            job = Job(stage: "Downloading from the Pi", fraction: 0)
+            set("Downloading from the Pi", 0, overall: 0.02)
             let dir = try await pi.download(listing, into: Self.audioRoot) { done, total in
+                let f = Double(done) / Double(max(total, 1))
                 Task { @MainActor in
-                    self.job?.stage = String(format: "Downloading from the Pi · %.0f of %.0f MB",
-                                             Double(done) / 1e6, Double(total) / 1e6)
-                    self.job?.fraction = Double(done) / Double(max(total, 1))
+                    set(String(format: "Downloading from the Pi · %.0f of %.0f MB", Double(done) / 1e6, Double(total) / 1e6),
+                        f, overall: 0.02 + 0.38 * f)
                 }
             }
             Self.pruneAudio(keeping: listing.night)
 
-            job = Job(stage: "Analyzing", fraction: 0)
-            let result = try await Analyzer(workers: 2).analyze(night: dir) { stage, fraction in
-                Task { @MainActor in self.job = Job(stage: stage, fraction: fraction) }
+            set("Analyzing", 0, overall: 0.40)
+            // CPU only: the GPU isn't available to background work without a special
+            // entitlement, and it only saved ~5 s a night (benchmark, iPhone 17)
+            let result = try await Analyzer(workers: 2, computeUnits: .cpuOnly).analyze(night: dir) { stage, f in
+                Task { @MainActor in set(stage, f, overall: 0.40 + 0.48 * f) }
             }
-            job = Job(stage: "Making clips", fraction: 0)
-            let report = try await Task.detached(priority: .userInitiated) {
+            set("Making clips", 0, overall: 0.88)
+            let withClips = try await Task.detached(priority: .userInitiated) {
                 try Clips.write(result, into: Self.phoneClipsRoot.appendingPathComponent(listing.night),
                                 prefix: "\(Self.phoneClipsPrefix)\(listing.night)/") { f in
-                    Task { @MainActor in self.job?.fraction = f }
+                    Task { @MainActor in set("Making clips", f, overall: 0.88 + 0.12 * f) }
                 }
             }.value
-            let night = try JSONDecoder().decode(Night.self, from: JSONEncoder().encode(report))
+            let night = try JSONDecoder().decode(Night.self, from: JSONEncoder().encode(withClips))
             savePhoneNight(night)
             error = nil
             openNight = night.dir
+            report("Report ready", 1)
+            return true
+        } catch is CancellationError {
+            error = "iOS stopped the analysis before it finished (the phone may have been too busy or too warm). Tap it again to pick up where it left off: downloaded files are kept."
+            return false
         } catch {
             self.error = "\(error)"
+            return false
         }
     }
 
@@ -159,5 +190,50 @@ enum Keychain {
         add[kSecValueData as String] = Data(value.utf8)
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         SecItemAdd(add as CFDictionary, nil)
+    }
+}
+
+/// One run of the job as an iOS 26 continued-processing task: the system keeps
+/// it going with the app in the background and shows its progress.
+@available(iOS 26, *)
+enum ContinuedJob {
+    /// Info.plist BGTaskSchedulerPermittedIdentifiers has "<this>.*".
+    static let prefix = "com.waleedrizwan.NightOwl.analyze"
+
+    /// Runs work inside a BGContinuedProcessingTask and returns true once it has
+    /// finished (well or not). Returns false without running it if the system
+    /// won't start one right now; then run it in the foreground instead.
+    @MainActor
+    static func run(title: String, subtitle: String,
+                    work: @escaping @MainActor (_ report: @escaping @MainActor (String, Double) -> Void) async -> Bool) async -> Bool {
+        // a fresh identifier each time: each may be registered only once
+        let id = "\(prefix).\(UUID().uuidString.prefix(8))"
+        return await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+            let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: nil) { task in
+                guard let task = task as? BGContinuedProcessingTask else {
+                    task.setTaskCompleted(success: false)
+                    return
+                }
+                task.progress.totalUnitCount = 1000
+                let running = Task { @MainActor in
+                    let ok = await work { stage, overall in
+                        task.updateTitle(title, subtitle: stage)
+                        task.progress.completedUnitCount = Int64(min(max(overall, 0), 1) * 1000)
+                    }
+                    task.setTaskCompleted(success: ok)
+                    done.resume(returning: true)
+                }
+                task.expirationHandler = { running.cancel() }
+            }
+            guard registered else { done.resume(returning: false); return }
+            let request = BGContinuedProcessingTaskRequest(identifier: id, title: title, subtitle: subtitle)
+            request.strategy = .fail          // run now or not at all; we fall back to the foreground
+            do {
+                try BGTaskScheduler.shared.submit(request)
+            } catch {
+                print("continued processing refused: \(error)")
+                done.resume(returning: false)
+            }
+        }
     }
 }

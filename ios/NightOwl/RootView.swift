@@ -95,9 +95,10 @@ struct WakeCard: View {
                         await store.refresh()
                     }
                 }
-            } else if store.hasFolder || store.hasPi {
-                // Always here: outside the recording window it just fetches the
-                // latest night (never stops the Pi, which would cancel tonight)
+            } else if store.hasFolder || store.hasPi, !store.hasTodaysNight {
+                // Here until today's report is in, even past noon; outside the recording
+                // window it just fetches the latest night (never stops the Pi, which would
+                // cancel the coming night)
                 let recording = store.inRecordingWindow
                 Button {
                     sending = true

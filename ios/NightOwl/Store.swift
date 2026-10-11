@@ -158,6 +158,8 @@ final class Store {
             let p = try JSONDecoder().decode(Payload.self, from: data)
             macNights = p.nights
             error = nil
+            // Application Support doesn't exist on a fresh install until something creates it
+            try? FileManager.default.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: cacheURL, options: .atomic)
         } catch {
             self.error = (error as? OwlError)?.message ?? "Couldn't read nights.json: \(error.localizedDescription)"
@@ -185,10 +187,8 @@ final class Store {
     /// The Pi records 02:00–12:00; the Mac files each night under the date it was recorded.
     var hasTodaysNight: Bool { latest?.dir == Night.dayFormat.string(from: .now) }
 
-    var isRecording: Bool {
-        let hour = Calendar.current.component(.hour, from: .now)
-        return (2..<12).contains(hour) && !hasTodaysNight
-    }
+    /// The Pi's 02:00-12:00 window.
+    var inRecordingWindow: Bool { (2..<12).contains(Calendar.current.component(.hour, from: .now)) }
 
     /// When the user last pressed "I'm up"; cleared once today's night shows up.
     var wokeAt: Date? {

@@ -70,7 +70,7 @@ struct WakeCard: View {
                         Spacer()
                     }
                     if let f = job.fraction { ProgressView(value: f).tint(Theme.amber) }
-                    Text("Keep Night Owl open; this takes a couple of minutes.")
+                    Text("About two minutes. You can lock your phone; it keeps going.")
                         .font(.caption2).foregroundStyle(Theme.muted)
                 }
                 .padding(14)
@@ -95,12 +95,17 @@ struct WakeCard: View {
                         await store.refresh()
                     }
                 }
-            } else if store.hasFolder || store.hasPi, store.isRecording {
+            } else if store.hasFolder || store.hasPi {
+                // Always here: outside the recording window it just fetches the
+                // latest night (never stops the Pi, which would cancel tonight)
+                let recording = store.inRecordingWindow
                 Button {
                     sending = true
                     Task {
                         // with the Pi set up, this iPhone does it all; otherwise ask the Mac via iCloud
-                        if store.hasPi { await store.analyzeOnPhone(stopFirst: true) } else { await store.wake() }
+                        if store.hasPi { await store.analyzeOnPhone(stopFirst: recording) }
+                        else if recording { await store.wake() }
+                        else { await store.refresh() }
                         sending = false
                     }
                 } label: {
@@ -108,7 +113,7 @@ struct WakeCard: View {
                         Image(systemName: "sun.max.fill")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("I'm up").font(.headline)
-                            Text("Stop recording and get last night's report")
+                            Text(recording ? "Stop recording and get last night's report" : "Get last night's report")
                                 .font(.caption).opacity(0.75)
                         }
                         Spacer()

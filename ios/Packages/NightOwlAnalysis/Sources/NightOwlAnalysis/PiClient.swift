@@ -54,7 +54,11 @@ public struct PiClient: Sendable {
     /// Downloads the night's complete files into dir/<night>/, resuming partial
     /// files and checking each against the Pi's SHA-256. Files already here and
     /// verified are skipped. progress(bytes done, bytes total).
-    public func download(_ listing: Listing, into dir: URL, lanes: Int = 2,
+    /// If the Pi drops off the network mid-way (its USB Wi-Fi adapter sometimes
+    /// resets under load and is back in ~10 s), each file waits and tries again
+    /// for up to `patience` seconds; waiting(true/false) says when that's happening.
+    public func download(_ listing: Listing, into dir: URL, lanes: Int = 2, patience: TimeInterval = 180,
+                         waiting: @escaping @Sendable (Bool) -> Void = { _ in },
                          progress: @escaping @Sendable (Int64, Int64) -> Void) async throws -> URL {
         let nightDir = dir.appendingPathComponent(listing.night, isDirectory: true)
         try FileManager.default.createDirectory(at: nightDir, withIntermediateDirectories: true)
@@ -65,8 +69,23 @@ public struct PiClient: Sendable {
             for lane in 0..<max(1, lanes) {
                 group.addTask {
                     for f in stride(from: lane, to: files.count, by: max(1, lanes)).map({ files[$0] }) {
-                        try await fetch(night: listing.night, file: f, to: nightDir.appendingPathComponent(f.name)) { delta in
-                            progress(tally.add(delta), total)
+                        var lostSince: Date?
+                        while true {
+                            let counted = Tally()        // this attempt's bytes, taken back if it fails
+                            do {
+                                try await fetch(night: listing.night, file: f, to: nightDir.appendingPathComponent(f.name)) { delta in
+                                    _ = counted.add(delta)
+                                    progress(tally.add(delta), total)
+                                }
+                                if lostSince != nil { waiting(false) }
+                                break
+                            } catch PiError.unreachable(let why) {
+                                progress(tally.add(-counted.add(0)), total)
+                                let since = lostSince ?? .now
+                                if lostSince == nil { lostSince = since; waiting(true) }
+                                if Date.now.timeIntervalSince(since) > patience { throw PiError.unreachable(why) }
+                                try await Task.sleep(for: .seconds(5))
+                            }
                         }
                     }
                 }

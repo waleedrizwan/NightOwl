@@ -196,8 +196,17 @@ final class Store {
         set { withMutation(keyPath: \.wokeAt) { UserDefaults.standard.set(newValue, forKey: "wokeAt") } }
     }
 
+    /// Waiting on the Mac, which only happens without the Pi set up: with it, the
+    /// phone does the work itself, and a run that died just offers "I'm up" again.
     var waitingForReport: Bool {
-        guard let w = wokeAt, Calendar.current.isDateInToday(w) else { return false }
+        guard !hasPi, let w = wokeAt, Calendar.current.isDateInToday(w) else { return false }
+        return !hasTodaysNight
+    }
+
+    /// "I'm up" ran on this phone today but no report came of it (the app was
+    /// closed or iOS stopped it mid-way).
+    var phoneRunUnfinished: Bool {
+        guard hasPi, job == nil, let w = wokeAt, Calendar.current.isDateInToday(w) else { return false }
         return !hasTodaysNight
     }
 

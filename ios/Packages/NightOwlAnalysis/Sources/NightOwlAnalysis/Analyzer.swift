@@ -58,8 +58,14 @@ public struct Analyzer: Sendable {
         let lanes = max(1, min(workers, chunks.count))
 
         // pass 1: steady tones per file, then the night-wide ones added to each file
+        // progress is one 0...1 across both passes; the hum pass is the quick one
         progress?("Finding steady hums", 0)
-        let perFile = try await inLanes(chunks.count, lanes) { i in Hum.findTones(try chunks[i].2.samples()) }
+        let humsDone = Counter()
+        let perFile = try await inLanes(chunks.count, lanes) { i in
+            let found = Hum.findTones(try chunks[i].2.samples())
+            progress?("Finding steady hums", 0.15 * Double(humsDone.increment()) / Double(chunks.count))
+            return found
+        }
         let common = Hum.nightTones(perFile)
         let tones = perFile.map { Hum.mergeTones($0, common) }
 
@@ -74,7 +80,8 @@ public struct Analyzer: Sendable {
             let frames = try Self.frames(ends: ends, buffer: clean, bufferStart: c.segmentOffset, anchorMs: anchor, model: model)
             // hiss profile of the whole file, for cleaning the clips that start in it
             let profile = Denoise.noiseProfile(clean)
-            progress?("Listening", Double(done.increment()) / Double(chunks.count))
+            let n = done.increment()
+            progress?("Listening for snores · file \(n) of \(chunks.count)", 0.15 + 0.85 * Double(n) / Double(chunks.count))
             return (frames, head: Array(clean.prefix(Audio.window)), tail: Array(clean.suffix(Audio.window)), profile: profile)
         }
         let model = try YAMNet(computeUnits: computeUnits)

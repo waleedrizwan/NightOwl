@@ -12,6 +12,16 @@ struct NightOwlApp: App {
                 .environment(Store.shared)
                 .preferredColorScheme(.dark)
                 .tint(Theme.amber)
+                .task {
+                    // devicectl launch with -probeContinued: will iOS run a background job now?
+                    guard CommandLine.arguments.contains("-probeContinued"), #available(iOS 26, *) else { return }
+                    JobLog.write("probing")
+                    let ran = await ContinuedJob.run(title: "Night Owl", subtitle: "Test") { report in
+                        for i in 1...20 { report("Test \(i)", Double(i) / 20); try? await Task.sleep(for: .seconds(1)) }
+                        return true
+                    }
+                    JobLog.write("probe ran=\(ran) refusal=\(ContinuedJob.lastRefusal ?? "none")")
+                }
         }
         .onChange(of: phase) { _, p in
             if p == .active { Task { await Store.shared.refresh() } }

@@ -3,14 +3,20 @@ import Foundation
 import NightOwlAnalysis
 import Security
 import UIKit
+import UserNotifications
 
 /// "I'm up" without the Mac: stop the Pi, download the night from its file
 /// server, analyze it here (NightOwlAnalysis, the Swift port of analyze.py),
 /// and keep the result next to the nights the Mac publishes.
 extension Store {
     struct Job: Equatable {
+        var step = 1                  // of Job.steps
         var stage: String
-        var fraction: Double?
+        var overall = 0.0             // 0...1 across the whole job
+        var started = Date.now
+        var lastProgress = Date.now   // for "no progress for a while"
+        var inBackground = false      // running as a continued-processing task (survives a locked screen)
+        static let steps = 4          // stop + download, find hums, listen, clips
     }
 
     // MARK: settings
@@ -75,12 +81,24 @@ extension Store {
         }
         if #available(iOS 26, *),
            await ContinuedJob.run(title: "Night Owl", subtitle: job?.stage ?? "", work: { report in
-               await self.runJob(stopFirst: stopFirst, report: report)
+               self.job?.inBackground = true
+               return await self.runJob(stopFirst: stopFirst, report: report)
            }) {
             return
         }
-        let background = UIApplication.shared.beginBackgroundTask(withName: "Analyze night")
-        defer { UIApplication.shared.endBackgroundTask(background) }
+        JobLog.write("running in the foreground only")
+        final class Slot: @unchecked Sendable { var id = UIBackgroundTaskIdentifier.invalid }
+        let background = Slot()
+        func endBackground() {
+            guard background.id != .invalid else { return }
+            UIApplication.shared.endBackgroundTask(background.id)
+            background.id = .invalid
+        }
+        background.id = UIApplication.shared.beginBackgroundTask(withName: "Analyze night") {
+            JobLog.write("foreground-only run: out of background time, iOS is suspending the app")
+            MainActor.assumeIsolated { endBackground() }
+        }
+        defer { endBackground() }
         _ = await runJob(stopFirst: stopFirst) { _, _ in }
     }
 
@@ -88,13 +106,18 @@ extension Store {
     @MainActor
     private func runJob(stopFirst: Bool, report: @escaping @MainActor (String, Double) -> Void) async -> Bool {
         guard let pi else { return false }
-        func set(_ stage: String, _ fraction: Double?, overall: Double) {
-            job = Job(stage: stage, fraction: fraction)
+        func set(_ step: Int, _ stage: String, overall: Double) {
+            guard var j = job else { return }
+            if j.stage != stage || abs(j.overall - overall) >= 0.001 { j.lastProgress = .now }
+            j.step = step
+            j.stage = stage
+            j.overall = max(j.overall, overall)
+            job = j
             report(stage, overall)
         }
         do {
             if stopFirst {
-                set("Stopping the recorder", nil, overall: 0.01)
+                set(1, "Stopping the recorder", overall: 0.01)
                 try await pi.stop()
                 wokeAt = .now
             }
@@ -104,27 +127,32 @@ extension Store {
                 throw PhoneError.nothingOnPi
             }
 
-            set("Downloading from the Pi", 0, overall: 0.02)
-            let dir = try await pi.download(listing, into: Self.audioRoot) { done, total in
+            set(1, "Downloading last night from the Pi", overall: 0.02)
+            let dir = try await pi.download(listing, into: Self.audioRoot, waiting: { lost in
+                Task { @MainActor in
+                    JobLog.write(lost ? "lost the Pi mid-download; waiting" : "Pi back")
+                    if lost { set(1, "Lost the Pi for a moment, waiting for it to come back", overall: self.job?.overall ?? 0.02) }
+                }
+            }) { done, total in
                 let f = Double(done) / Double(max(total, 1))
                 Task { @MainActor in
-                    set(String(format: "Downloading from the Pi · %.0f of %.0f MB", Double(done) / 1e6, Double(total) / 1e6),
-                        f, overall: 0.02 + 0.38 * f)
+                    set(1, String(format: "Downloading last night from the Pi · %.0f of %.0f MB", Double(done) / 1e6, Double(total) / 1e6),
+                        overall: 0.02 + 0.28 * f)
                 }
             }
             Self.pruneAudio(keeping: listing.night)
 
-            set("Analyzing", 0, overall: 0.40)
+            set(2, "Finding steady hums", overall: 0.30)
             // CPU only: the GPU isn't available to background work without a special
             // entitlement, and it only saved ~5 s a night (benchmark, iPhone 17)
             let result = try await Analyzer(workers: 2, computeUnits: .cpuOnly).analyze(night: dir) { stage, f in
-                Task { @MainActor in set(stage, f, overall: 0.40 + 0.48 * f) }
+                Task { @MainActor in set(f < 0.15 ? 2 : 3, stage, overall: 0.30 + 0.60 * f) }
             }
-            set("Making clips", 0, overall: 0.88)
+            set(4, "Making clips to listen to", overall: 0.90)
             let withClips = try await Task.detached(priority: .userInitiated) {
                 try Clips.write(result, into: Self.phoneClipsRoot.appendingPathComponent(listing.night),
                                 prefix: "\(Self.phoneClipsPrefix)\(listing.night)/") { f in
-                    Task { @MainActor in set("Making clips", f, overall: 0.88 + 0.12 * f) }
+                    Task { @MainActor in set(4, "Making clips to listen to", overall: 0.90 + 0.10 * f) }
                 }
             }.value
             let night = try JSONDecoder().decode(Night.self, from: JSONEncoder().encode(withClips))
@@ -132,14 +160,44 @@ extension Store {
             error = nil
             openNight = night.dir
             report("Report ready", 1)
+            JobLog.write("done: \(night.dir) in \(Int(Date.now.timeIntervalSince(job?.started ?? .now)))s")
+            Self.notify(title: "Snore Score \(night.score) · \(night.band)",
+                        body: (night.snoreMs > 0 ? "\(Self.hm(night.snoreMs)) snoring" : "No snoring")
+                            + " (\(night.percentOfNight)% of \(Self.hm(night.recordedMs)))"
+                            + (night.gasps.isEmpty ? "" : " · \(night.gasps.count) possible gasp\(night.gasps.count > 1 ? "s" : "")"),
+                        night: night.dir)
             return true
         } catch is CancellationError {
+            JobLog.write("cancelled at \(job?.stage ?? "?")")
             error = "iOS stopped the analysis before it finished (the phone may have been too busy or too warm). Tap it again to pick up where it left off: downloaded files are kept."
+            Self.notify(title: "Last night's report didn't finish", body: "Open Night Owl and tap I'm up to pick up where it left off.")
             return false
         } catch {
+            JobLog.write("failed at \(job?.stage ?? "?"): \(error)")
             self.error = "\(error)"
+            Self.notify(title: "Last night's report didn't finish", body: "\(error)")
             return false
         }
+    }
+
+    /// A local notification when the job ends, unless the app is on screen
+    /// (then the report or the error is already in front of you). Tapping it
+    /// opens the night, like the Mac's push.
+    @MainActor
+    private static func notify(title: String, body: String, night: String? = nil) {
+        guard UIApplication.shared.applicationState != .active else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        if let night { content.userInfo = ["night": night] }
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "phone-job", content: content, trigger: nil))
+    }
+
+    /// "1h 23m" / "23m"
+    static func hm(_ ms: Int) -> String {
+        let m = ms / 60_000
+        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
     }
 
     private static func pruneAudio(keeping night: String) {
@@ -193,12 +251,34 @@ enum Keychain {
     }
 }
 
+/// What iOS did with each "I'm up" run (background allowed or refused, started,
+/// expired, how it ended), in Application Support/job-log.txt for reading off
+/// the phone later: `devicectl device copy from`.
+enum JobLog {
+    static var url: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("job-log.txt")
+    }
+
+    static func write(_ line: String) {
+        print("[job] \(line)")
+        let stamped = "\(ISO8601DateFormatter().string(from: .now)) \(line)\n"
+        if let h = try? FileHandle(forWritingTo: url) {
+            _ = try? h.seekToEnd(); try? h.write(contentsOf: Data(stamped.utf8)); try? h.close()
+        } else {
+            try? Data(stamped.utf8).write(to: url)
+        }
+    }
+}
+
 /// One run of the job as an iOS 26 continued-processing task: the system keeps
 /// it going with the app in the background and shows its progress.
 @available(iOS 26, *)
 enum ContinuedJob {
     /// Info.plist BGTaskSchedulerPermittedIdentifiers has "<this>.*".
     static let prefix = "com.waleedrizwan.NightOwl.analyze"
+
+    /// Why iOS last refused to run the job in the background, for the progress card.
+    @MainActor static var lastRefusal: String?
 
     /// Runs work inside a BGContinuedProcessingTask and returns true once it has
     /// finished (well or not). Returns false without running it if the system
@@ -214,6 +294,8 @@ enum ContinuedJob {
                     task.setTaskCompleted(success: false)
                     return
                 }
+                JobLog.write("started \(id)")
+                lastRefusal = nil
                 task.progress.totalUnitCount = 1000
                 let running = Task { @MainActor in
                     let ok = await work { stage, overall in
@@ -223,15 +305,21 @@ enum ContinuedJob {
                     task.setTaskCompleted(success: ok)
                     done.resume(returning: true)
                 }
-                task.expirationHandler = { running.cancel() }
+                task.expirationHandler = { JobLog.write("expired"); running.cancel() }
             }
-            guard registered else { done.resume(returning: false); return }
+            guard registered else {
+                lastRefusal = "couldn't register \(id)"
+                JobLog.write("\(lastRefusal!)")
+                done.resume(returning: false)
+                return
+            }
             let request = BGContinuedProcessingTaskRequest(identifier: id, title: title, subtitle: subtitle)
             request.strategy = .fail          // run now or not at all; we fall back to the foreground
             do {
                 try BGTaskScheduler.shared.submit(request)
             } catch {
-                print("continued processing refused: \(error)")
+                lastRefusal = "\(error)"
+                JobLog.write("refused: \(error) \((error as NSError).domain) \((error as NSError).code)")
                 done.resume(returning: false)
             }
         }

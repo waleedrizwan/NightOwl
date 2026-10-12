@@ -52,6 +52,65 @@ struct TonightTab: View {
     }
 }
 
+/// Progress of "I'm up" on this iPhone: which step, how far overall, how long
+/// so far and roughly how long to go, and a warning if it stops moving.
+struct JobCard: View {
+    let job: Store.Job
+
+    var body: some View {
+        TimelineView(.periodic(from: job.started, by: 1)) { context in
+            let now = context.date
+            let elapsed = now.timeIntervalSince(job.started)
+            let idle = now.timeIntervalSince(job.lastProgress)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Building your report on this iPhone").font(.subheadline.weight(.semibold))
+                        Text("Step \(job.step) of \(Store.Job.steps) · \(job.stage)")
+                            .font(.caption).foregroundStyle(Theme.muted).monospacedDigit()
+                    }
+                    Spacer()
+                }
+                ProgressView(value: job.overall).tint(Theme.amber)
+                Text(timing(elapsed: elapsed))
+                    .font(.caption).foregroundStyle(Theme.muted).monospacedDigit()
+                if idle >= 45 {
+                    Text("Nothing has moved for \(Self.clock(idle)). "
+                         + (job.inBackground ? "iOS may be holding it back; it should pick up again."
+                                             : "iOS pauses it when Night Owl isn't on screen. Keep the app open."))
+                        .font(.caption).foregroundStyle(Theme.amber)
+                }
+                Text(job.inBackground ? "You can lock your phone or switch apps; it keeps going."
+                                      : "Keep Night Owl open until this finishes. Locking the phone or switching apps pauses it.")
+                    .font(.caption2).foregroundStyle(Theme.muted)
+                if !job.inBackground, #available(iOS 26, *), let why = ContinuedJob.lastRefusal {
+                    Text("iOS said no to running it in the background: \(why)")
+                        .font(.caption2).foregroundStyle(Theme.muted)
+                }
+            }
+        }
+        .padding(14)
+        .background(Theme.card, in: .rect(cornerRadius: 14))
+        .padding(.horizontal).padding(.top, 6)
+    }
+
+    /// "42% · 1:23 so far · about 2 min to go" (no guess until there's enough to go on)
+    private func timing(elapsed: TimeInterval) -> String {
+        var parts = ["\(Int(job.overall * 100))%", "\(Self.clock(elapsed)) so far"]
+        if job.overall >= 0.05, elapsed >= 10, job.overall < 1 {
+            let left = elapsed * (1 - job.overall) / job.overall
+            parts.append(left < 60 ? "under a minute to go" : "about \(Int((left / 60).rounded())) min to go")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func clock(_ t: TimeInterval) -> String {
+        let s = Int(t)
+        return s < 60 ? "\(s)s" : String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
 /// "I'm up": stop the Pi and get the report now instead of at 12:15.
 struct WakeCard: View {
     @Environment(Store.self) private var store
@@ -60,22 +119,7 @@ struct WakeCard: View {
     var body: some View {
         TimelineView(.everyMinute) { _ in
             if let job = store.job {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 12) {
-                        ProgressView()
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Building your report on this iPhone").font(.subheadline.weight(.semibold))
-                            Text(job.stage).font(.caption).foregroundStyle(Theme.muted).monospacedDigit()
-                        }
-                        Spacer()
-                    }
-                    if let f = job.fraction { ProgressView(value: f).tint(Theme.amber) }
-                    Text("About two minutes. You can lock your phone; it keeps going.")
-                        .font(.caption2).foregroundStyle(Theme.muted)
-                }
-                .padding(14)
-                .background(Theme.card, in: .rect(cornerRadius: 14))
-                .padding(.horizontal).padding(.top, 6)
+                JobCard(job: job)
             } else if store.hasFolder, store.waitingForReport {
                 HStack(spacing: 12) {
                     ProgressView()
@@ -114,7 +158,8 @@ struct WakeCard: View {
                         Image(systemName: "sun.max.fill")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("I'm up").font(.headline)
-                            Text(recording ? "Stop recording and get last night's report" : "Get last night's report")
+                            Text(store.phoneRunUnfinished ? "The last try didn't finish. Tap to pick up where it left off"
+                                 : recording ? "Stop recording and get last night's report" : "Get last night's report")
                                 .font(.caption).opacity(0.75)
                         }
                         Spacer()

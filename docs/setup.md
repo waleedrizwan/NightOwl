@@ -58,6 +58,14 @@ To change the window or the mic, edit the defaults at the top of `recorder/recor
 - **Log:** `~/nightowl/record.log` on the Pi.
 - **Clock:** a Pi has no battery-backed clock, so the recorder waits for network time before it names any file.
 
+Optional, if the Pi is on Wi-Fi (needs sudo on the Pi):
+
+```sh
+OWL_WIFI="Home 5G" OWL_WIFI_BACKUP="Home" OWL_WIFI_DRIVER=rtw88_8822bu recorder/system/install.sh
+```
+
+This adds a watchdog that reconnects Wi-Fi (then tries the backup link, restarts networking, reloads the adapter's driver, and finally reboots) when the router stops answering. It also puts the Pi's `.local` name back if avahi renames it to `<name>-2.local` after a reconnect, which otherwise leaves the phone unable to find the Pi. The names are NetworkManager connections (`nmcli con`). Leave out the backup or the driver if you don't have them. Log: `/var/log/wifi-watchdog.log`.
+
 ## 4. Set up analysis on the Mac
 
 You need [uv](https://docs.astral.sh/uv/) (`brew install uv`). The first run of `morning.sh` creates `analysis/.venv` and installs `coremltools` and `numpy`.

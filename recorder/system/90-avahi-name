@@ -1,0 +1,5 @@
+#!/bin/bash
+# NetworkManager dispatcher: a link came back up; give avahi a few seconds to
+# announce, then make sure it kept the Pi's name.
+[ "$2" = "up" ] || exit 0
+(sleep 8; /usr/local/sbin/avahi-name-check.sh) &

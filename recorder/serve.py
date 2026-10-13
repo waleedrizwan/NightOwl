@@ -8,11 +8,13 @@ the token in ~/nightowl/server.token, sent as "Authorization: Bearer <token>";
 it is created on first start. Run by cron (install.sh), one copy at a time.
 
     GET  /                          {"service": "nightowl", "version": 1}  (no token)
-    GET  /status                    recording now? which night? stopped early?
+    GET  /status                    recording now? until when? the schedule; stopped early?
     GET  /nights                    every night with its files, sizes, and which are complete
     GET  /nights/<night>/<file>     the WAV, with Range support so a dropped download resumes
     GET  /nights/<night>/<file>.sha256    {"sha256": ...} to verify a copy
     POST /stop                      end tonight's recording (stop.sh, the "I'm up" button)
+    POST /start                     record now until the next scheduled stop time (or {"until": "HH:MM"})
+    POST /schedule                  {"auto": true, "start": "02:00", "end": "11:00"}: when record.sh records
 """
 from __future__ import annotations
 
@@ -33,10 +35,14 @@ ROOT = Path(os.environ.get("OWL_ROOT", HOME / "nights"))
 APP = HOME / "nightowl"
 TOKEN_FILE = APP / "server.token"
 STOPPED = APP / "stopped"
+SCHEDULE = APP / "schedule"          # read by record.sh
+MANUAL = APP / "manual"              # epoch seconds: record.sh records until then
+DEFAULT_SCHEDULE = {"auto": True, "start": "02:00", "end": "11:00"}
 PORT = int(os.environ.get("OWL_PORT", "8642"))
 os.environ.setdefault("TZ", "America/Toronto")
 time.tzset()
 
+HHMM_RE = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 NIGHT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 FILE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.wav$")
 CHUNK = 256 * 1024
@@ -53,6 +59,42 @@ def token() -> str:
 
 def recording() -> bool:
     return subprocess.run(["pgrep", "-x", "arecord"], capture_output=True).returncode == 0
+
+
+def schedule() -> dict:
+    out = dict(DEFAULT_SCHEDULE)
+    if SCHEDULE.exists():
+        for line in SCHEDULE.read_text().splitlines():
+            k, _, v = line.partition("=")
+            if k == "AUTO" and v in ("0", "1"):
+                out["auto"] = v == "1"
+            elif k in ("START", "END") and HHMM_RE.match(v):
+                out[k.lower()] = v
+    return out
+
+
+def next_time(hhmm: str) -> int:
+    """Epoch seconds of the next HH:MM (local), today if still ahead, else tomorrow."""
+    h, m = map(int, hhmm.split(":"))
+    now = time.localtime()
+    t = time.mktime((now.tm_year, now.tm_mon, now.tm_mday, h, m, 0, 0, 0, -1))
+    if t <= time.time():
+        t = time.mktime((now.tm_year, now.tm_mon, now.tm_mday + 1, h, m, 0, 0, 0, -1))
+    return int(t)
+
+
+def manual_until() -> int | None:
+    try:
+        u = int(MANUAL.read_text().strip())
+    except (OSError, ValueError):
+        return None
+    return u if u > time.time() else None
+
+
+def write_atomic(path: Path, text: str):
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
 
 
 def nights() -> list[dict]:
@@ -113,11 +155,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():
             return
         if parts == ["status"]:
-            return self.send_json({
-                "recording": recording(),
-                "today": time.strftime("%Y-%m-%d"),
-                "stoppedToday": STOPPED.exists() and STOPPED.read_text().strip() == time.strftime("%Y-%m-%d"),
-            })
+            return self.send_json(self.status())
         if parts == ["nights"]:
             return self.send_json({"nights": nights()})
         if len(parts) == 3 and parts[0] == "nights":
@@ -165,14 +203,59 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(block)
                 length -= len(block)
 
+    def status(self) -> dict:
+        until = manual_until()
+        return {
+            "recording": recording(),
+            "today": time.strftime("%Y-%m-%d"),
+            "stoppedToday": STOPPED.exists() and STOPPED.read_text().strip() == time.strftime("%Y-%m-%d"),
+            "schedule": schedule(),
+            "manualUntil": until * 1000 if until else None,   # ms, like the app's other times
+        }
+
+    def body(self) -> dict:
+        n = int(self.headers.get("Content-Length") or 0)
+        if not n:
+            return {}
+        try:
+            data = json.loads(self.rfile.read(min(n, 4096)))
+        except ValueError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
     def do_POST(self):
         if not self.authorized():
             return
-        if self.path.split("?")[0].rstrip("/") == "/stop":
+        path = self.path.split("?")[0].rstrip("/")
+        if path == "/stop":
             r = subprocess.run([str(APP / "stop.sh")], capture_output=True, text=True, timeout=30)
             return self.send_json({"stopped": r.returncode == 0,
                                    "output": (r.stdout + r.stderr).strip()},
                                   200 if r.returncode == 0 else 500)
+        if path == "/start":
+            until = self.body().get("until") or schedule()["end"]
+            if not isinstance(until, str) or not HHMM_RE.match(until):
+                return self.send_json({"error": "until must be HH:MM"}, 400)
+            write_atomic(MANUAL, f"{next_time(until)}\n")
+            STOPPED.unlink(missing_ok=True)          # overrides an earlier "I'm up" today
+            subprocess.Popen([str(APP / "record.sh")], start_new_session=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for _ in range(20):                      # record.sh has the lock: say so once arecord is up
+                if recording():
+                    break
+                time.sleep(0.25)
+            return self.send_json(self.status())
+        if path == "/schedule":
+            b, cur = self.body(), schedule()
+            new = {"auto": b.get("auto", cur["auto"]), "start": b.get("start", cur["start"]),
+                   "end": b.get("end", cur["end"])}
+            if not (isinstance(new["auto"], bool) and all(isinstance(new[k], str) and HHMM_RE.match(new[k])
+                                                            for k in ("start", "end"))):
+                return self.send_json({"error": "want auto: bool, start and end: HH:MM"}, 400)
+            if new["start"] >= new["end"]:
+                return self.send_json({"error": "the stop time must be after the start time (same day)"}, 400)
+            write_atomic(SCHEDULE, f"AUTO={int(new['auto'])}\nSTART={new['start']}\nEND={new['end']}\n")
+            return self.send_json(self.status())
         self.send_json({"error": "not found"}, 404)
 
 

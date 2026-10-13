@@ -1,4 +1,5 @@
 import Foundation
+import NightOwlAnalysis
 import Observation
 
 // MARK: - What the Mac publishes (analysis/publish.py → iCloud Drive/NightOwl/nights.json)
@@ -62,6 +63,7 @@ final class Store {
     private(set) var hasFolder = false
     var openNight: String?            // set by a notification tap or a finished analysis
     var job: Job?                     // analysis on this iPhone in progress (PhoneAnalysis.swift)
+    var piStatus: PiClient.Status?    // the Pi's own word on recording and its schedule (nil: unknown)
     var piToken: String? = Keychain.get("token") {
         didSet { Keychain.set("token", piToken) }
     }
@@ -187,8 +189,17 @@ final class Store {
     /// The Pi records 02:00–12:00; the Mac files each night under the date it was recorded.
     var hasTodaysNight: Bool { latest?.dir == Night.dayFormat.string(from: .now) }
 
-    /// The Pi's 02:00-12:00 window.
-    var inRecordingWindow: Bool { (2..<12).contains(Calendar.current.component(.hour, from: .now)) }
+    /// Is the Pi recording? Its own answer when it's reachable, else a guess
+    /// from its schedule (by default 02:00-11:00, Toronto time).
+    var inRecordingWindow: Bool {
+        if let s = piStatus { return s.recording }
+        guard Self.cachedSchedule.auto else { return false }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = Audio.timeZone
+        let c = cal.dateComponents([.hour, .minute], from: .now)
+        let now = String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+        return (Self.cachedSchedule.start...Self.cachedSchedule.end).contains(now) && now != Self.cachedSchedule.end
+    }
 
     /// When the user last pressed "I'm up"; cleared once today's night shows up.
     var wokeAt: Date? {

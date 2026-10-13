@@ -31,7 +31,18 @@ public struct PiClient: Sendable {
         }
     }
 
-    public struct Status: Decodable, Sendable { public let recording: Bool, today: String, stoppedToday: Bool }
+    public struct Status: Decodable, Sendable, Equatable {
+        public let recording: Bool, today: String, stoppedToday: Bool
+        /// When the Pi records on its own (older servers don't say).
+        public let schedule: Schedule?
+        /// "Start recording" is running until this time (ms), if it is.
+        public let manualUntil: Int?
+    }
+    public struct Schedule: Codable, Sendable, Equatable {
+        public var auto: Bool
+        public var start: String, end: String          // "HH:MM", Pi's local time (America/Toronto)
+        public init(auto: Bool, start: String, end: String) { self.auto = auto; self.start = start; self.end = end }
+    }
     public struct File: Decodable, Sendable { public let name: String, bytes: Int64, complete: Bool }
     public struct Listing: Decodable, Sendable {
         public let night: String, files: [File], bytes: Int64
@@ -42,6 +53,19 @@ public struct PiClient: Sendable {
     public func nights() async throws -> [Listing] {
         struct R: Decodable { let nights: [Listing] }
         return try await (json("nights") as R).nights
+    }
+
+    /// Records from now until the next scheduled stop time (or `until`, "HH:MM"),
+    /// whatever the hour, and even after an earlier "I'm up" today.
+    @discardableResult
+    public func start(until: String? = nil) async throws -> Status {
+        try await json("start", method: "POST", body: until.map { ["until": $0] } ?? [:])
+    }
+
+    /// When the Pi records on its own; applies from its next recording.
+    @discardableResult
+    public func setSchedule(_ schedule: Schedule) async throws -> Status {
+        try await json("schedule", method: "POST", body: schedule)
     }
 
     /// Ends tonight's recording ("I'm up"); returns once the last file is closed.
@@ -144,16 +168,20 @@ public struct PiClient: Sendable {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    private func request(_ path: String, method: String = "GET") -> URLRequest {
+    private func request(_ path: String, method: String = "GET", body: (any Encodable)? = nil) -> URLRequest {
         var req = URLRequest(url: baseURL.appendingPathComponent(path))
         req.httpMethod = method
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let body, let data = try? JSONEncoder().encode(body) {
+            req.httpBody = data
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         if path == "stop" { req.timeoutInterval = 45 }
         return req
     }
 
-    private func json<T: Decodable>(_ path: String, method: String = "GET") async throws -> T {
-        let (data, response) = try await call { try await session.data(for: request(path, method: method)) }
+    private func json<T: Decodable>(_ path: String, method: String = "GET", body: (any Encodable)? = nil) async throws -> T {
+        let (data, response) = try await call { try await session.data(for: request(path, method: method, body: body)) }
         try check(response, body: data)
         return try JSONDecoder().decode(T.self, from: data)
     }

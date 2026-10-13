@@ -118,6 +118,21 @@ struct WakeCard: View {
 
     var body: some View {
         TimelineView(.everyMinute) { _ in
+            VStack(spacing: 0) {
+                cards
+                if store.hasPi, store.job == nil, store.piStatus?.recording == false { StartCard() }
+            }
+        }
+        // the Pi's own word on whether it's recording, kept fresh while this is on screen
+        .task {
+            while !Task.isCancelled {
+                await store.refreshPiStatus()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+    }
+
+    @ViewBuilder private var cards: some View {
             if let job = store.job {
                 JobCard(job: job)
             } else if store.hasFolder, store.waitingForReport {
@@ -139,10 +154,11 @@ struct WakeCard: View {
                         await store.refresh()
                     }
                 }
-            } else if store.hasFolder || store.hasPi, !store.hasTodaysNight {
-                // Here until today's report is in, even past noon; outside the recording
-                // window it just fetches the latest night (never stops the Pi, which would
-                // cancel the coming night)
+            } else if store.hasFolder || store.hasPi, !store.hasTodaysNight || store.piStatus?.recording == true {
+                // Here until today's report is in, even past noon, and whenever the Pi is
+                // recording (a nap after the morning report). When it isn't recording it
+                // just fetches the latest night (never stops the Pi, which would cancel
+                // the coming night)
                 let recording = store.inRecordingWindow
                 Button {
                     sending = true
@@ -159,7 +175,8 @@ struct WakeCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("I'm up").font(.headline)
                             Text(store.phoneRunUnfinished ? "The last try didn't finish. Tap to pick up where it left off"
-                                 : recording ? "Stop recording and get last night's report" : "Get last night's report")
+                                 : recording ? "Recording until \(store.stopTime). Tap to stop and get the report"
+                                 : "Get last night's report")
                                 .font(.caption).opacity(0.75)
                         }
                         Spacer()
@@ -173,7 +190,35 @@ struct WakeCard: View {
                 .disabled(sending)
                 .padding(.horizontal).padding(.top, 6)
             }
+    }
+}
+
+/// "Start recording": the Pi records from now until the stop time, whatever the hour.
+struct StartCard: View {
+    @Environment(Store.self) private var store
+    @State private var starting = false
+
+    var body: some View {
+        Button {
+            starting = true
+            Task { await store.startRecording(); starting = false }
+        } label: {
+            HStack {
+                Image(systemName: "record.circle")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Start recording").font(.headline)
+                    Text("The Pi records until \(store.stopTime)").font(.caption).opacity(0.75)
+                }
+                Spacer()
+                if starting { ProgressView() }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity)
+            .background(Theme.card, in: .rect(cornerRadius: 14))
         }
+        .buttonStyle(.plain)
+        .disabled(starting)
+        .padding(.horizontal).padding(.top, 6)
     }
 }
 
@@ -257,6 +302,7 @@ struct SettingsView: View {
                     LabeledContent("Nights", value: "\(store.nights.count)")
                 }
                 PiSection()
+                if store.hasPi { ScheduleSection() }
                 Section("Snore Score") {
                     Text("5 × minutes of snoring per hour recorded, plus 1 per possible gasp, capped at 100. Lower is quieter.")
                         .font(.callout).foregroundStyle(Theme.muted)
@@ -300,5 +346,51 @@ struct PiSection: View {
             Text("With this set up, \"I'm up\" stops the Pi, downloads the night and builds the report on this iPhone, no Mac needed. Your Mac still copies each night at 12:15 as a backup. The token is on the Pi: run  ssh nightowl cat nightowl/server.token  on your Mac and paste it here.")
         }
         .onAppear { host = store.piHost == PiClient.defaultHost ? "" : store.piHost }
+    }
+}
+
+/// Settings: when the Pi records on its own.
+struct ScheduleSection: View {
+    @Environment(Store.self) private var store
+    @State private var auto = true
+    @State private var start = Date()
+    @State private var end = Date()
+    @State private var result: String?
+    @State private var saving = false
+
+    /// The Pi keeps Toronto time whatever zone this phone is in.
+    private static let clock: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = Audio.timeZone
+        return f
+    }()
+
+    var body: some View {
+        Section {
+            Toggle("Record every night", isOn: $auto)
+            DatePicker("Starts", selection: $start, displayedComponents: .hourAndMinute).disabled(!auto)
+            DatePicker("Stops", selection: $end, displayedComponents: .hourAndMinute)
+            Button(saving ? "Saving…" : "Save schedule") {
+                saving = true
+                let s = PiClient.Schedule(auto: auto, start: Self.clock.string(from: start), end: Self.clock.string(from: end))
+                Task { result = await store.saveSchedule(s); saving = false }
+            }
+            .disabled(saving)
+            if let result { Text(result).font(.callout).foregroundStyle(Theme.muted) }
+        } header: {
+            Text("Recording schedule")
+        } footer: {
+            Text("Times are the Pi's (Toronto). Start recording on the main screen also records until the stop time, whenever you tap it. A change applies from the next recording.")
+        }
+        .environment(\.timeZone, Audio.timeZone)
+        .task {
+            await store.refreshPiStatus()
+            let s = store.piStatus?.schedule ?? Store.cachedSchedule
+            auto = s.auto
+            start = Self.clock.date(from: s.start) ?? start
+            end = Self.clock.date(from: s.end) ?? end
+        }
     }
 }

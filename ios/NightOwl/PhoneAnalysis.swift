@@ -19,6 +19,68 @@ extension Store {
         static let steps = 4          // stop + download, find hums, listen, clips
     }
 
+    // MARK: recording (the Pi's schedule and "Start recording")
+
+    static let defaultSchedule = PiClient.Schedule(auto: true, start: "02:00", end: "11:00")
+
+    /// The last schedule the Pi reported, for guessing while it's out of reach.
+    static var cachedSchedule: PiClient.Schedule {
+        get {
+            (UserDefaults.standard.data(forKey: "piSchedule")).flatMap { try? JSONDecoder().decode(PiClient.Schedule.self, from: $0) }
+                ?? defaultSchedule
+        }
+        set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: "piSchedule") }
+    }
+
+    /// Ask the Pi what it's doing. On failure the app falls back to the schedule.
+    @MainActor
+    func refreshPiStatus() async {
+        guard let pi else { piStatus = nil; return }
+        let s = try? await pi.status()
+        if s != piStatus { piStatus = s }
+        if let schedule = s?.schedule { Self.cachedSchedule = schedule }
+    }
+
+    /// "HH:MM" the current or next recording stops at.
+    var stopTime: String {
+        if let until = piStatus?.manualUntil {
+            let f = DateFormatter()
+            f.dateFormat = "HH:mm"
+            f.timeZone = Audio.timeZone
+            return f.string(from: Date(ms: until))
+        }
+        return (piStatus?.schedule ?? Self.cachedSchedule).end
+    }
+
+    @MainActor
+    func startRecording() async {
+        guard let pi else { return }
+        do {
+            piStatus = try await pi.start()
+            if piStatus?.recording != true {
+                error = "The Pi didn't start recording. Is the microphone plugged in?"
+            } else {
+                error = nil
+            }
+        } catch {
+            self.error = "\(error)"
+        }
+    }
+
+    /// Saves the schedule on the Pi; returns a line for Settings.
+    @MainActor
+    func saveSchedule(_ schedule: PiClient.Schedule) async -> String {
+        guard let pi else { return "Set up the Pi first." }
+        do {
+            piStatus = try await pi.setSchedule(schedule)
+            Self.cachedSchedule = piStatus?.schedule ?? schedule
+            return schedule.auto ? "Saved. The Pi records every night \(schedule.start)–\(schedule.end)."
+                : "Saved. The Pi only records when you tap Start recording."
+        } catch {
+            return "\(error)"
+        }
+    }
+
     // MARK: settings
 
     var piHost: String {

@@ -7,7 +7,14 @@ HOST="${OWL_HOST:-nightowl}"
 
 echo "Installing the recorder and file server on $HOST"
 ssh "$HOST" 'mkdir -p ~/nightowl ~/nights'
-scp -q "$HERE/record.sh" "$HERE/stop.sh" "$HERE/serve.py" "$HOST:nightowl/"
+# Copy under temporary names and rename into place: bash reads a script as it
+# runs, so overwriting record.sh in place would corrupt a recording in progress;
+# a rename leaves the running copy its old file.
+scp -q "$HERE/record.sh" "$HOST:nightowl/record.sh.new"
+scp -q "$HERE/stop.sh" "$HOST:nightowl/stop.sh.new"
+scp -q "$HERE/serve.py" "$HOST:nightowl/serve.py.new"
+ssh "$HOST" 'cd ~/nightowl && chmod +x record.sh.new stop.sh.new serve.py.new &&
+  mv record.sh.new record.sh && mv stop.sh.new stop.sh && mv serve.py.new serve.py'
 # Replace any earlier recorder entries (including the pre-rename dreamcatcher/ one)
 # so two recorders never fight over the mic. The file server (serve.py) is
 # started the same way; flock keeps it to one copy, so the 5-minute tick only

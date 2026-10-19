@@ -8,7 +8,7 @@ the token in ~/nightowl/server.token, sent as "Authorization: Bearer <token>";
 it is created on first start. Run by cron (install.sh), one copy at a time.
 
     GET  /                          {"service": "nightowl", "version": 1}  (no token)
-    GET  /status                    recording now? until when? the schedule; stopped early?
+    GET  /status                    recording now? until when? the schedule; stopped early? mic plugged in?
     GET  /nights                    every night with its files, sizes, and which are complete
     GET  /nights/<night>/<file>     the WAV, with Range support so a dropped download resumes
     GET  /nights/<night>/<file>.sha256    {"sha256": ...} to verify a copy
@@ -59,6 +59,12 @@ def token() -> str:
 
 def recording() -> bool:
     return subprocess.run(["pgrep", "-x", "arecord"], capture_output=True).returncode == 0
+
+
+def mic() -> bool:
+    """Is record.sh's mic plugged in? ALSA lists each card under /proc/asound by its id."""
+    card = re.search(r"CARD=([^,]+)", os.environ.get("OWL_DEVICE", "plughw:CARD=Device,DEV=0"))
+    return card is None or Path("/proc/asound", card.group(1)).exists()
 
 
 def schedule() -> dict:
@@ -207,6 +213,7 @@ class Handler(BaseHTTPRequestHandler):
         until = manual_until()
         return {
             "recording": recording(),
+            "mic": mic(),
             "today": time.strftime("%Y-%m-%d"),
             "stoppedToday": STOPPED.exists() and STOPPED.read_text().strip() == time.strftime("%Y-%m-%d"),
             "schedule": schedule(),

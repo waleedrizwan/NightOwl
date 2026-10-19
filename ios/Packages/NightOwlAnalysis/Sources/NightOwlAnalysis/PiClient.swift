@@ -37,6 +37,8 @@ public struct PiClient: Sendable {
         public let schedule: Schedule?
         /// "Start recording" is running until this time (ms), if it is.
         public let manualUntil: Int?
+        /// Is the USB mic plugged in? (older servers don't say)
+        public let mic: Bool?
     }
     public struct Schedule: Codable, Sendable, Equatable {
         public var auto: Bool

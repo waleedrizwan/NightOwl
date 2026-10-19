@@ -188,6 +188,11 @@ extension Store {
             guard let listing = (stopFirst ? listings.first { $0.night == today } : nil) ?? listings.last else {
                 throw PhoneError.nothingOnPi
             }
+            // nothing new since the last report: say why instead of redoing an old night
+            if listing.night != today, phoneNights.contains(where: { $0.dir == listing.night && $0.hasClips }) {
+                let mic = try? await pi.status().mic
+                throw PhoneError.noNewNight(latest: listing.night, micMissing: mic == false)
+            }
 
             set(1, "Downloading last night from the Pi", overall: 0.02)
             let dir = try await pi.download(listing, into: Self.audioRoot, waiting: { lost in
@@ -282,9 +287,13 @@ extension Store {
 
 enum PhoneError: Error, CustomStringConvertible {
     case nothingOnPi
+    case noNewNight(latest: String, micMissing: Bool)
     var description: String {
         switch self {
         case .nothingOnPi: "The Pi has no recordings waiting. Your Mac may have already copied last night; it will show up from there."
+        case .noNewNight(let latest, let micMissing):
+            "The Pi didn't record last night, so there's nothing new (the newest is \(latest), which you already have)."
+                + (micMissing ? " It can't find its mic: check the USB mic is plugged in." : "")
         }
     }
 }

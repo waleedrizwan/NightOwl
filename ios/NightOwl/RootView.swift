@@ -119,6 +119,7 @@ struct WakeCard: View {
     var body: some View {
         TimelineView(.everyMinute) { _ in
             VStack(spacing: 0) {
+                if store.hasPi, store.piStatus?.mic == false { MicMissingCard() }
                 cards
                 if store.hasPi, store.job == nil, store.piStatus?.recording == false { StartCard() }
             }
@@ -190,6 +191,24 @@ struct WakeCard: View {
                 .disabled(sending)
                 .padding(.horizontal).padding(.top, 6)
             }
+    }
+}
+
+/// The Pi can't find its USB mic, so nothing records until it's plugged back in.
+struct MicMissingCard: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "mic.slash.fill").font(.title3).foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("The Pi can't find its mic").font(.subheadline.weight(.semibold))
+                Text("Nothing will record until it's back. Unplug the USB mic and plug it in again.")
+                    .font(.caption).foregroundStyle(Theme.muted)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(Theme.card, in: .rect(cornerRadius: 14))
+        .padding(.horizontal).padding(.top, 6)
     }
 }
 
